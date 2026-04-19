@@ -11,7 +11,7 @@ from datetime import datetime
 class GitCreatorGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("KDSN Git Helper - 记忆集成版")
+        self.root.title("KDSN Git Helper - 记忆集成版 (最终版)")
         self.root.geometry("600x650")
         
         # 1. 核心配置与样式
@@ -208,14 +208,28 @@ class GitCreatorGUI:
             if current in ['main', 'master']:
                 messagebox.showwarning("严谨警告", "禁止直接推送主分支！")
                 return
+            
+            # 自动添加和提交
             repo.git.add(A=True)
             repo.index.commit(f"PR Update: {current}")
+            
+            # 推送到远程
             origin = repo.remote('origin') if 'origin' in repo.remotes else repo.create_remote('origin', url)
             origin.set_url(url)
             self.log(f"正在推送 {current}...")
             origin.push(current, force=True)
-            webbrowser.open(f"{url.replace('.git', '')}/compare/{current}")
-        except Exception as e: self.log(f"失败: {e}")
+            
+            self.log("✅ 推送成功！")
+            
+            # 【修复点1】刷新 GUI 状态，让它立刻变回绿色的“✅ 现场干净”
+            self.update_status()
+            
+            # 【修复点2】弹窗询问，如果你选“否”，就不打开网页
+            if messagebox.askyesno("推送完成", "代码已成功推送至云端！\n\n是否要在浏览器中打开网页创建 PR？"):
+                webbrowser.open(f"{url.replace('.git', '')}/compare/{current}?expand=1")
+                
+        except Exception as e: 
+            self.log(f"失败: {e}")
 
 if __name__ == "__main__":
     root = tk.Tk()
