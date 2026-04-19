@@ -15,9 +15,10 @@ from datetime import datetime
 class GitCreatorGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("KDSN Git Helper - 终极纯净版 (自适应拉伸 + 弹窗交互)")
-        self.root.geometry("620x800") 
-        self.root.minsize(550, 600) # 防止缩得太小导致控件重叠
+        self.root.title("KDSN Git Helper - 终极纯净版 (窄窗 + 精准记录)")
+        # 【修改 1】：窗口变窄，更加修长紧凑
+        self.root.geometry("500x800") 
+        self.root.minsize(450, 600) 
         
         self.config_file = "git_helper_config.json"
         self.config_data = self.load_config()
@@ -38,7 +39,6 @@ class GitCreatorGUI:
         self.load_recent_logs()
         self.auto_load_last_project()
         
-        # 启动极低开销的实时监控引擎
         self.auto_check_status()
 
     def init_database(self):
@@ -51,15 +51,14 @@ class GitCreatorGUI:
         self.db_conn.commit()
 
     def setup_ui(self):
-        # --- 1. 顶部大红字与导航 (填满 X 轴) ---
+        # --- 1. 顶部大红字与导航 ---
         header_frame = tk.Frame(self.root)
         header_frame.pack(fill="x", padx=15, pady=(15, 5))
 
         tk.Button(header_frame, text="⚙️ 仓库配置", command=self.open_settings, font=('Arial', 10, 'bold'), bg="#f0f0f0").pack(side="left")
-        # 将历史分支按钮收纳至顶部
         tk.Button(header_frame, text="🗂️ 历史分支", command=self.open_history_window, font=('Arial', 10, 'bold'), bg="#e8f5e9").pack(side="left", padx=(10, 0))
         
-        self.lbl_main_repo = tk.Label(header_frame, text="[未选择仓库]", fg="red", font=("微软雅黑", 16, "bold"))
+        self.lbl_main_repo = tk.Label(header_frame, text="[未选择仓库]", fg="red", font=("微软雅黑", 15, "bold"))
         self.lbl_main_repo.pack(side="left", expand=True)
 
         # --- 2. 路径切换与下拉框 ---
@@ -72,7 +71,7 @@ class GitCreatorGUI:
         
         tk.Button(path_frame, text="📁 浏览新目录", command=self.select_dir, font=('Arial', 9)).pack(side="right")
 
-        # ====== 3. 双状态面板 (上下流线布局，自适应宽度) ======
+        # ====== 3. 双状态面板 ======
         # [上次状态]
         self.frame_last = tk.LabelFrame(self.root, text=" 上次状态 ", fg=self.colors["gray"], font=('微软雅黑', 10))
         self.frame_last.pack(fill="x", padx=15, pady=5)
@@ -101,7 +100,9 @@ class GitCreatorGUI:
         curr_info_frame = tk.Frame(self.frame_curr, cursor="hand2")
         curr_info_frame.pack(side="left", fill="both", expand=True, padx=10, pady=5)
         
-        # 移除原有的文本框，直接用 Label 表征当前是在什么分支工作
+        # 【修改 2】：当前实时状态也拥有自己的记录显示标签
+        self.lbl_curr_msg = tk.Label(curr_info_frame, text="📝 记录: 无", fg="black", font=("微软雅黑", 10, "bold"))
+        self.lbl_curr_msg.pack(anchor="w")
         self.lbl_curr_branch = tk.Label(curr_info_frame, text="🌿 分支: 无", font=("Consolas", 12, "bold"), fg="black")
         self.lbl_curr_branch.pack(anchor="w")
         self.lbl_curr_status = tk.Label(curr_info_frame, text="请检测状态...", font=("微软雅黑", 10))
@@ -116,21 +117,21 @@ class GitCreatorGUI:
 
         for target in [last_info_frame, self.lbl_last_msg, self.lbl_last_branch, self.lbl_last_status]:
             target.bind("<Button-1>", lambda e: self.copy_branch_and_flash("last"))
-        for target in [curr_info_frame, self.lbl_curr_branch, self.lbl_curr_status]:
+        for target in [curr_info_frame, self.lbl_curr_msg, self.lbl_curr_branch, self.lbl_curr_status]:
             target.bind("<Button-1>", lambda e: self.copy_branch_and_flash("curr"))
 
         # --- 4. 核心流水线区 ---
         flow_frame = tk.LabelFrame(self.root, text="🚀 核心流水线", padx=15, pady=10)
         flow_frame.pack(fill="x", padx=15, pady=5)
         
-        self.btn_pipeline = tk.Button(flow_frame, text="📦 一键打包上云\n(点击后输入更新内容 ➔ 建分支 ➔ 提交 ➔ 推送)", 
+        self.btn_pipeline = tk.Button(flow_frame, text="📦 一键打包上云\n(点击后输入更新内容 ➔ 建分支 ➔ 推送)", 
                                       bg="#e3f2fd", font=('微软雅黑', 11, 'bold'), command=self.run_one_click_pipeline, height=2)
         self.btn_pipeline.pack(fill="x")
         
         self.lbl_gui_alert = tk.Label(flow_frame, text="", font=("微软雅黑", 10, "bold"))
         self.lbl_gui_alert.pack(fill="x")
 
-        # --- 5. 日志控制条与内容区 (拉伸的核心支撑) ---
+        # --- 5. 日志控制条与内容区 ---
         log_ctrl_frame = tk.Frame(self.root)
         log_ctrl_frame.pack(fill="x", padx=15, pady=(5, 0))
         
@@ -138,7 +139,6 @@ class GitCreatorGUI:
         tk.Button(log_ctrl_frame, text="🧹 清空", command=self.clear_logs, font=('微软雅黑', 8), cursor="hand2", bg="#f5f5f5").pack(side="right", padx=(5, 0))
         tk.Button(log_ctrl_frame, text="📋 复制全部", command=self.copy_all_logs, font=('微软雅黑', 8), cursor="hand2", bg="#e8f5e9").pack(side="right")
 
-        # expand=True 让日志区域在窗口被纵向拉伸时能自动吸纳所有多余空间
         self.log_area = scrolledtext.ScrolledText(self.root, height=12, font=('Consolas', 9))
         self.log_area.pack(fill="both", expand=True, padx=15, pady=(2, 10))
 
@@ -294,7 +294,6 @@ class GitCreatorGUI:
         now = datetime.now()
         return f"{now.year}-{now.month}-{now.day}--{now.strftime('%H-%M-%S')}"
 
-    # --- 极低资源消耗的动态监控 ---
     def auto_check_status(self):
         path = self.repo_path.get()
         if path and os.path.exists(os.path.join(path, '.git')):
@@ -312,7 +311,6 @@ class GitCreatorGUI:
         
         self.root.after(2000, self.auto_check_status)
 
-    # --- 【重点功能重构】：弹出独立的“历史分支”窗口 ---
     def open_history_window(self):
         path = self.repo_path.get()
         if not path or not os.path.exists(os.path.join(path, '.git')):
@@ -342,13 +340,11 @@ class GitCreatorGUI:
         def on_tree_click(event):
             item = tree.identify_row(event.y)
             if item:
-                # 重置所有为未选
                 for child in tree.get_children():
                     vals = list(tree.item(child, "values"))
                     if vals[0] == "🔘":
                         vals[0] = "⚪"
                         tree.item(child, values=vals)
-                # 勾选当前
                 vals = list(tree.item(item, "values"))
                 vals[0] = "🔘"
                 tree.item(item, values=vals)
@@ -367,11 +363,9 @@ class GitCreatorGUI:
                 msg = b.commit.message.strip().split('\n')[0]
                 if msg.startswith("Auto Wrap: "):
                     msg = msg.replace("Auto Wrap: ", "")
-                # 【强迫症清理】：剔除可能带上的 ": 分支名" 尾巴，保证列表只看纯净文字
                 if f": {b.name}" in msg:
                     msg = msg.replace(f": {b.name}", "")
                 
-                # 当前工作区的分支前加个小标记
                 if b.name == repo.active_branch.name:
                     msg = f"[当前停留] {msg}"
                     
@@ -423,14 +417,27 @@ class GitCreatorGUI:
                 self.curr_branch = repo.active_branch.name
                 self.lbl_curr_branch.config(text=f"🌿 分支: {self.curr_branch}")
                 
+                # 【修改 3】：直接从 Git 底层提取当前分支的真实记录，保证绝对准确
+                try:
+                    latest_commit = repo.head.commit.message.strip().split('\n')[0]
+                    if latest_commit.startswith("Auto Wrap: "):
+                        latest_commit = latest_commit.replace("Auto Wrap: ", "")
+                    if f": {self.curr_branch}" in latest_commit:
+                        latest_commit = latest_commit.replace(f": {self.curr_branch}", "")
+                    self.lbl_curr_msg.config(text=f"📝 记录: {latest_commit}")
+                except:
+                    self.lbl_curr_msg.config(text="📝 记录: 无")
+                
                 has_url = bool(self.remote_url.get())
                 self.btn_curr_web.config(state="normal" if has_url else "disabled")
             except:
                 self.lbl_curr_branch.config(text="🌿 分支: 获取失败")
+                self.lbl_curr_msg.config(text="📝 记录: 获取失败")
         else:
             repo_name = os.path.basename(path) if path else "未选择"
             self.lbl_main_repo.config(text=f"[{repo_name}]")
             self.lbl_curr_branch.config(text="🌿 分支: 无")
+            self.lbl_curr_msg.config(text="📝 记录: 无")
             self.lbl_curr_status.config(text="未初始化 Git 仓库 (请点击左上角配置 URL)")
             self.btn_curr_web.config(state="disabled")
             self.btn_curr_copy.config(state="disabled")
@@ -459,11 +466,9 @@ class GitCreatorGUI:
                 else:
                     self.log("⚠️ 触发强制同步模式...")
 
-            # --- 【重点重构】：通过优雅的弹窗接收更新内容 ---
             custom_msg = simpledialog.askstring("输入更新内容", "准备打包上云！\n请输入本次更新的核心记录描述：\n（留空将默认使用 '自动打包上云'）", parent=self.root)
             
             if custom_msg is None:
-                # 用户点击了弹窗的“取消”或关闭了弹窗
                 self.show_gui_alert("🛡️ 已取消打包推送 (未确认更新内容)。", self.colors["alert"])
                 return
                 
@@ -474,10 +479,12 @@ class GitCreatorGUI:
             self.show_gui_alert("⏳ 正在创建时间分支并推送至云端...", "blue")
             self.root.update()
 
+            # 【修改 4】：移交逻辑修复。把真正的旧状态移交给“上次状态”
             self.last_branch = self.curr_branch
-            self.lbl_last_msg.config(text=f"📝 记录: {custom_msg}")
-            self.lbl_last_branch.config(text=self.lbl_curr_branch.cget("text"))
+            self.lbl_last_msg.config(text=self.lbl_curr_msg.cget("text")) # 把旧记录给它
+            self.lbl_last_branch.config(text=self.lbl_curr_branch.cget("text")) # 把旧分支名给它
             self.lbl_last_status.config(text="✅ 历史状态归档")
+            
             self.btn_last_web.config(state="normal")
             self.btn_last_copy.config(state="normal")
 
@@ -488,7 +495,6 @@ class GitCreatorGUI:
                 repo.git.checkout('-B', branch_name)
 
             repo.git.add(A=True)
-            # 提交格式：更新内容 : 分支名
             repo.index.commit(f"{custom_msg}: {branch_name}")
 
             self.log(f"📡 正在尝试连线推送到: {url}")
@@ -497,7 +503,8 @@ class GitCreatorGUI:
             origin.set_url(url)
             origin.push(branch_name, force=True, set_upstream=True)
 
-            self.update_status()
+            # 打包完成后调用 update_status，它会自动把刚才提交的 custom_msg 读取并显示在“当前实时状态”中
+            self.update_status() 
             self.copy_branch_url("curr")
             
             self.show_gui_alert("✅ 时间分支打包上云成功！", self.colors["current"])
