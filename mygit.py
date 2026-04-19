@@ -3,7 +3,6 @@ from tkinter import filedialog, messagebox, scrolledtext, Toplevel
 import git
 import os
 import time
-import webbrowser
 import json
 import pyperclip
 from datetime import datetime
@@ -11,7 +10,7 @@ from datetime import datetime
 class GitCreatorGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("KDSN Git Helper - 记忆集成版 (最终版)")
+        self.root.title("KDSN Git Helper - 记忆集成版 (无打扰最终版)")
         self.root.geometry("600x650")
         
         # 1. 核心配置与样式
@@ -67,7 +66,8 @@ class GitCreatorGUI:
                                       command=self.prepare_new_feature, height=2)
         self.btn_new_feat.pack(fill="x", pady=5)
         
-        tk.Button(flow_frame, text="2. 推送当前改动并跳转 PR", bg="#c8e6c9", 
+        # 按钮文案修改
+        tk.Button(flow_frame, text="2. 推送当前改动并清理现场", bg="#c8e6c9", 
                   command=self.push_feature_for_pr, height=2).pack(fill="x", pady=5)
 
         # --- 日志区域 ---
@@ -86,7 +86,6 @@ class GitCreatorGUI:
                 self.log(f"自动恢复上次项目: {os.path.basename(last_path)}")
                 return
         
-        # 如果没有last_opened标记，但有其他配置路径，随便挑一个存在的
         for path in self.config_data.keys():
             if path != "last_opened" and os.path.exists(path):
                 self.repo_path.set(path)
@@ -123,7 +122,7 @@ class GitCreatorGUI:
         path = self.repo_path.get()
         if path and os.path.exists(os.path.join(path, '.git')):
             repo_name = os.path.basename(path)
-            self.lbl_repo_name.config(text=f"[{repo_name}]") # 红字显示仓库名
+            self.lbl_repo_name.config(text=f"[{repo_name}]")
             try:
                 repo = git.Repo(path)
                 self.current_branch = repo.active_branch.name
@@ -161,7 +160,6 @@ class GitCreatorGUI:
         return {}
 
     def save_config(self):
-        # 记录最后打开的路径
         self.config_data["last_opened"] = self.repo_path.get()
         with open(self.config_file, 'w') as f: json.dump(self.config_data, f)
 
@@ -171,7 +169,7 @@ class GitCreatorGUI:
             self.repo_path.set(path)
             self.remote_url.set(self.config_data.get(path, ""))
             self.update_status()
-            self.save_config() # 切换项目时自动保存为最后打开
+            self.save_config() 
             self.log(f"项目切换: {os.path.basename(path)}")
 
     def open_settings(self):
@@ -194,10 +192,23 @@ class GitCreatorGUI:
         win.destroy()
         self.update_status()
 
+    # --- 日志持久化写入 ---
     def log(self, message):
-        self.log_area.insert(tk.END, f"[{time.strftime('%H:%M:%S')}] {message}\n")
+        short_time = time.strftime('%H:%M:%S')
+        long_time = time.strftime('%Y-%m-%d %H:%M:%S')
+        log_line = f"[{short_time}] {message}\n"
+        
+        self.log_area.insert(tk.END, log_line)
         self.log_area.see(tk.END)
+        
+        # 写入本地文件作为永久日志
+        try:
+            with open("git_helper_history.log", "a", encoding="utf-8") as f:
+                f.write(f"[{long_time}] {message}\n")
+        except Exception as e:
+            print(f"日志写入失败: {e}")
 
+    # --- 推送逻辑 (无网页纯净版) ---
     def push_feature_for_pr(self):
         path = self.repo_path.get()
         url = self.remote_url.get()
@@ -219,14 +230,13 @@ class GitCreatorGUI:
             self.log(f"正在推送 {current}...")
             origin.push(current, force=True)
             
-            self.log("✅ 推送成功！")
+            self.log("✅ 代码已安全推送到 GitHub 云端！")
             
-            # 【修复点1】刷新 GUI 状态，让它立刻变回绿色的“✅ 现场干净”
+            # 刷新 GUI 状态变绿
             self.update_status()
             
-            # 【修复点2】弹窗询问，如果你选“否”，就不打开网页
-            if messagebox.askyesno("推送完成", "代码已成功推送至云端！\n\n是否要在浏览器中打开网页创建 PR？"):
-                webbrowser.open(f"{url.replace('.git', '')}/compare/{current}?expand=1")
+            # 直接弹窗提示成功，不打开任何网页
+            messagebox.showinfo("推送成功", f"分支 [{current}] 已安全上云！\n现场已清理干净。\n\n你可以直接在 Cursor 里进行 PR 操作了。")
                 
         except Exception as e: 
             self.log(f"失败: {e}")
