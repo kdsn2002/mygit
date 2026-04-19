@@ -6,13 +6,14 @@ import time
 import json
 import pyperclip
 import webbrowser
+import sqlite3
 from datetime import datetime
 
 class GitCreatorGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("KDSN Git Helper - 严谨防呆版 (防自我背刺)")
-        self.root.geometry("620x760")
+        self.root.title("KDSN Git Helper - 终极无感版 (带本地数据库)")
+        self.root.geometry("620x780")
         
         # 1. 核心配置与样式
         self.config_file = "git_helper_config.json"
@@ -20,7 +21,8 @@ class GitCreatorGUI:
         self.colors = {
             "flash1": "#FFFF00", "flash2": "#800080",
             "current": "#2E7D32", "blue": "#2196F3", "gray": "gray",
-            "repo_name": "#D32F2F" 
+            "repo_name": "#D32F2F",
+            "alert": "#E65100" # 警告橘色
         }
 
         # 2. 变量
@@ -29,14 +31,28 @@ class GitCreatorGUI:
         self.last_branch = "无"
         self.curr_branch = "无"
 
+        # 3. 初始化本地数据库
+        self.init_database()
+
         self.setup_ui()
+        self.load_recent_logs() # 启动时读取历史日志
         self.auto_load_last_project()
+
+    def init_database(self):
+        """初始化 SQLite 数据库"""
+        self.db_conn = sqlite3.connect("git_helper_data.db", check_same_thread=False)
+        self.cursor = self.db_conn.cursor()
+        self.cursor.execute('''CREATE TABLE IF NOT EXISTS logs
+                               (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                time TEXT,
+                                message TEXT)''')
+        self.db_conn.commit()
 
     def setup_ui(self):
         # --- 顶部功能区 ---
         tk.Button(self.root, text="⚙️ 仓库配置 (需配置远程 URL 才能生链接)", command=self.open_settings, font=('Arial', 9)).pack(fill="x", padx=15, pady=(10, 5))
 
-        # ====== 双状态面板 (内嵌独立操作按钮) ======
+        # ====== 双状态面板 ======
         # --- 上次状态 ---
         self.frame_last = tk.LabelFrame(self.root, text=" 上次状态 ", fg=self.colors["gray"], font=('微软雅黑', 9))
         self.frame_last.pack(fill="x", padx=15, pady=5)
@@ -79,7 +95,7 @@ class GitCreatorGUI:
         self.btn_curr_copy = tk.Button(curr_btn_frame, text="🔗 复制链接", command=lambda: self.copy_branch_url("curr"), font=('Arial', 9, 'bold'), state="disabled")
         self.btn_curr_copy.pack(fill="x", pady=2)
 
-        # 绑定点击复制分支名和闪烁
+        # 绑定点击事件 (无弹窗)
         for target in [last_info_frame, self.lbl_last_repo, self.lbl_last_branch, self.lbl_last_status]:
             target.bind("<Button-1>", lambda e: self.copy_branch_and_flash("last"))
         for target in [curr_info_frame, self.lbl_curr_repo, self.lbl_curr_branch, self.lbl_curr_status]:
@@ -87,23 +103,61 @@ class GitCreatorGUI:
 
         # --- 路径选择 ---
         path_frame = tk.Frame(self.root)
-        path_frame.pack(fill="x", padx=15, pady=10)
+        path_frame.pack(fill="x", padx=15, pady=5)
         tk.Entry(path_frame, textvariable=self.repo_path, state='readonly').pack(side="left", fill="x", expand=True, padx=(0, 5))
         tk.Button(path_frame, text="切换项目目录", command=self.select_dir).pack(side="right")
 
-        # --- 核心流水线 (强力防重复提交) ---
-        flow_frame = tk.LabelFrame(self.root, text="🚀 核心流水线 (自动防浪费保护)", padx=15, pady=15)
+        # --- 核心流水线 (GUI 内嵌提示，拒绝弹窗) ---
+        flow_frame = tk.LabelFrame(self.root, text="🚀 核心流水线", padx=15, pady=10)
         flow_frame.pack(fill="x", padx=15, pady=5)
 
-        self.btn_pipeline = tk.Button(flow_frame, text="📦 一键打包上云\n(无改动自动拦截 | 有改动自动建时间分支推云端)", 
+        self.btn_pipeline = tk.Button(flow_frame, text="📦 一键打包上云\n(无弹窗 | 自动拦截 | 自动推云端)", 
                                       bg="#e3f2fd", font=('微软雅黑', 10, 'bold'), command=self.run_one_click_pipeline, height=2)
-        self.btn_pipeline.pack(fill="x", pady=5)
+        self.btn_pipeline.pack(fill="x", pady=2)
+        
+        # 【新增】：专门用来显示成功或拦截信息的 GUI 文字屏 (替代弹窗)
+        self.lbl_gui_alert = tk.Label(flow_frame, text="", font=("微软雅黑", 10, "bold"))
+        self.lbl_gui_alert.pack(fill="x")
 
         # --- 日志区域 ---
-        self.log_area = scrolledtext.ScrolledText(self.root, height=10, font=('Consolas', 9))
+        self.log_area = scrolledtext.ScrolledText(self.root, height=12, font=('Consolas', 9))
         self.log_area.pack(fill="both", padx=15, pady=10, expand=True)
 
-    # --- 启动恢复逻辑 ---
+    # --- GUI 提示屏功能 ---
+    def show_gui_alert(self, message, color):
+        """在界面上显示提示信息，3秒后自动消失"""
+        self.lbl_gui_alert.config(text=message, fg=color)
+        self.root.after(4000, lambda: self.lbl_gui_alert.config(text=""))
+
+    # --- 数据库日志读写 ---
+    def load_recent_logs(self):
+        try:
+            self.cursor.execute("SELECT time, message FROM logs ORDER BY id DESC LIMIT 15")
+            rows = self.cursor.fetchall()
+            if rows:
+                self.log_area.insert(tk.END, "--- 数据库历史记录载入 ---\n")
+                for row in reversed(rows):
+                    short_t = row[0].split(" ")[1] if " " in row[0] else row[0]
+                    self.log_area.insert(tk.END, f"[{short_t}] {row[1]}\n")
+                self.log_area.insert(tk.END, "------------------------\n\n")
+                self.log_area.see(tk.END)
+        except Exception as e:
+            print("读取数据库失败", e)
+
+    def log(self, message):
+        short_time = time.strftime('%H:%M:%S')
+        long_time = time.strftime('%Y-%m-%d %H:%M:%S')
+        log_line = f"[{short_time}] {message}\n"
+        
+        self.log_area.insert(tk.END, log_line)
+        self.log_area.see(tk.END)
+        try:
+            # 存入真正的 SQLite 数据库
+            self.cursor.execute("INSERT INTO logs (time, message) VALUES (?, ?)", (long_time, message))
+            self.db_conn.commit()
+        except: pass
+
+    # --- 启动恢复 ---
     def auto_load_last_project(self):
         if "last_opened" in self.config_data:
             last_path = self.config_data["last_opened"]
@@ -111,7 +165,6 @@ class GitCreatorGUI:
                 self.repo_path.set(last_path)
                 self.remote_url.set(self.config_data.get(last_path, ""))
                 self.update_status()
-                self.log(f"自动恢复项目: {os.path.basename(last_path)}")
                 return
         for path in self.config_data.keys():
             if path != "last_opened" and os.path.exists(path):
@@ -120,13 +173,11 @@ class GitCreatorGUI:
                 self.update_status()
                 break
 
-    # --- 【新增代码：生成隐身衣】 ---
+    # --- 保护机制：将数据库也加入隐身衣 ---
     def enforce_gitignore(self, repo, path):
-        """强制将工具自身文件加入忽略名单，防止被当成代码修改"""
-        ignores = ['git_helper_history.log', 'git_helper_config.json']
+        ignores = ['git_helper_history.log', 'git_helper_config.json', 'git_helper_data.db']
         gitignore_path = os.path.join(path, '.gitignore')
         
-        # 1. 确保名字写入了 .gitignore
         content = ""
         if os.path.exists(gitignore_path):
             with open(gitignore_path, 'r', encoding='utf-8') as f:
@@ -140,13 +191,11 @@ class GitCreatorGUI:
                     f.write(f"{item}\n")
                     content += f"{item}\n"
         
-        # 2. 从 Git 缓存中强行解除之前的错误追踪
         try:
-            repo.git.rm('--cached', 'git_helper_history.log', 'git_helper_config.json', ignore_unmatch=True)
-        except:
-            pass
+            repo.git.rm('--cached', 'git_helper_history.log', 'git_helper_config.json', 'git_helper_data.db', ignore_unmatch=True)
+        except: pass
 
-    # --- 交互反馈 ---
+    # --- 无弹窗交互反馈 ---
     def copy_branch_and_flash(self, mode):
         if mode == "last":
             branch = self.last_branch
@@ -160,7 +209,7 @@ class GitCreatorGUI:
         if branch and branch != "无" and "获取失败" not in branch:
             pyperclip.copy(branch)
             self.flash_effect(target_frame, target_lbl, mode, 0)
-            self.log(f"已复制分支名: {branch}")
+            self.log(f"📋 已复制分支名: {branch}")
 
     def flash_effect(self, frame, lbl, mode, stage):
         sequence = [self.colors["flash1"], self.colors["flash2"], self.colors["flash1"], self.colors["flash2"]]
@@ -175,21 +224,23 @@ class GitCreatorGUI:
             frame.config(fg=orig_fg)
             lbl.config(fg=orig_lbl_fg)
 
-    # --- 独立 URL 获取与网页打开 ---
+    # --- 独立 URL 复制 (去弹窗版) ---
     def copy_branch_url(self, mode):
         url = self.remote_url.get().replace('.git', '')
         branch = self.last_branch if mode == "last" else self.curr_branch
         if url and branch and branch != "无":
             full_url = f"{url}/tree/{branch}"
             pyperclip.copy(full_url)
-            self.log(f"🔗 已复制 {mode} 状态网页链接！")
-            messagebox.showinfo("链接已复制", f"已复制 {mode} 状态的直达链接：\n{full_url}")
+            self.log(f"🔗 已复制网页链接，可直接发送给 AI！")
+            # 使用 GUI 屏幕提示，不弹窗
+            self.show_gui_alert(f"✅ {mode} 状态网页链接已复制到剪贴板！", self.colors["current"])
 
     def open_branch_web(self, mode):
         url = self.remote_url.get().replace('.git', '')
         branch = self.last_branch if mode == "last" else self.curr_branch
         if url and branch and branch != "无":
             webbrowser.open(f"{url}/tree/{branch}")
+            self.log("🌐 已在浏览器中打开分支")
 
     # --- 核心逻辑 ---
     def get_formatted_time(self):
@@ -203,8 +254,6 @@ class GitCreatorGUI:
             self.lbl_curr_repo.config(text=f"📁 仓库: [{repo_name}]")
             try:
                 repo = git.Repo(path)
-                
-                # 【防呆机制核心】：检测前先把工具自己的文件藏起来
                 self.enforce_gitignore(repo, path)
                 
                 self.curr_branch = repo.active_branch.name
@@ -215,7 +264,6 @@ class GitCreatorGUI:
                 clean_msg = "✅ 现场干净，无需重复打包" if is_clean else "⚠️ 有新改动，请点击打包上云"
                 self.lbl_curr_status.config(text=clean_msg)
                 
-                # 按钮点亮逻辑
                 has_url = bool(self.remote_url.get())
                 self.btn_curr_web.config(state="normal" if has_url else "disabled")
                 self.btn_curr_copy.config(state="normal" if is_clean and has_url else "disabled")
@@ -228,12 +276,12 @@ class GitCreatorGUI:
             self.lbl_curr_branch.config(text="🌿 分支: 无")
             self.lbl_curr_status.config(text="未初始化 Git 仓库")
 
-    # --- 流水线拦截 ---
+    # --- 终极无弹窗版流水线 ---
     def run_one_click_pipeline(self):
         path = self.repo_path.get()
         url = self.remote_url.get()
         if not path or not url: 
-            messagebox.showwarning("警告", "请先选择项目目录并在上方配置远程 URL。")
+            self.show_gui_alert("❌ 请先配置本地仓库和远程 URL！", "red")
             return
             
         try:
@@ -241,11 +289,14 @@ class GitCreatorGUI:
             status_raw = repo.git.status()
             is_clean = "nothing to commit, working tree clean" in status_raw
             
-            # 【核心保护】：如果现场干净，强行拦截！
+            # 【核心保护：彻底无弹窗的拦截】
             if is_clean:
-                messagebox.showinfo("拦截保护", "检测到您的代码【没有任何新修改】。\n为了节约资源，系统拒绝执行重复的打包推送操作。\n\n请先去改动代码，再来点击。")
+                self.show_gui_alert("🛡️ 拦截：代码无改动，拒绝浪费资源的重复打包！", self.colors["alert"])
                 self.log("🛡️ 已拦截无意义的重复打包。")
                 return
+
+            self.show_gui_alert("⏳ 正在打包并推送至云端...", "blue")
+            self.root.update() # 强制刷新 UI 让提示立刻显示
 
             # 1. 状态移交
             self.last_branch = self.curr_branch
@@ -255,30 +306,28 @@ class GitCreatorGUI:
             self.btn_last_web.config(state="normal")
             self.btn_last_copy.config(state="normal")
 
-            # 2. 创建时间分支
+            # 2. 创建分支 & 提交
             branch_name = self.get_formatted_time()
             repo.create_head(branch_name).checkout()
-            self.log(f"🌱 创建纯时间分支: {branch_name}")
-
-            # 3. 提交改动
             repo.git.add(A=True)
             repo.index.commit(f"Auto Wrap: {branch_name}")
-            self.log(f"📦 已打包本地新改动。")
 
-            # 4. 推送云端
+            # 3. 推送云端
             origin = repo.remote('origin') if 'origin' in repo.remotes else repo.create_remote('origin', url)
             origin.set_url(url)
-            self.log(f"🚀 正在推送到 GitHub...")
             origin.push(branch_name, force=True)
-            self.log("✅ 代码已安全上云！")
 
-            # 5. 刷新界面
+            # 4. 界面刷新与成功提示
             self.update_status()
-            # 自动复制新链接
-            self.copy_branch_url("curr")
+            self.copy_branch_url("curr") # 自动复制
+            
+            # GUI 原生成功提示
+            self.show_gui_alert("✅ 打包上云成功！当前链接已自动复制！", self.colors["current"])
+            self.log("✅ 代码流水线执行完毕，安全上云。")
 
         except Exception as e:
             self.log(f"❌ 流水线失败: {e}")
+            self.show_gui_alert("❌ 推送失败，详情请看日志", "red")
 
     # --- 存档与设置 ---
     def load_config(self):
@@ -297,7 +346,6 @@ class GitCreatorGUI:
             self.remote_url.set(self.config_data.get(path, ""))
             self.update_status()
             self.save_config() 
-            self.log(f"项目切换: {os.path.basename(path)}")
 
     def open_settings(self):
         path = self.repo_path.get()
@@ -318,19 +366,6 @@ class GitCreatorGUI:
             git.Repo.init(path)
         win.destroy()
         self.update_status()
-
-    # --- 日志持久化写入 ---
-    def log(self, message):
-        short_time = time.strftime('%H:%M:%S')
-        long_time = time.strftime('%Y-%m-%d %H:%M:%S')
-        log_line = f"[{short_time}] {message}\n"
-        
-        self.log_area.insert(tk.END, log_line)
-        self.log_area.see(tk.END)
-        try:
-            with open("git_helper_history.log", "a", encoding="utf-8") as f:
-                f.write(f"[{long_time}] {message}\n")
-        except: pass
 
 if __name__ == "__main__":
     root = tk.Tk()
