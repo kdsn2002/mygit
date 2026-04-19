@@ -15,8 +15,8 @@ from datetime import datetime
 class GitCreatorGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("KDSN Git Helper - 终极纯净版 (窄窗 + 精准记录)")
-        # 【修改 1】：窗口变窄，更加修长紧凑
+        self.root.title("KDSN Git Helper - 终极纯净版 (对调优化版)")
+        # 保持窄窗体设计
         self.root.geometry("500x800") 
         self.root.minsize(450, 600) 
         
@@ -71,9 +71,9 @@ class GitCreatorGUI:
         
         tk.Button(path_frame, text="📁 浏览新目录", command=self.select_dir, font=('Arial', 9)).pack(side="right")
 
-        # ====== 3. 双状态面板 ======
+        # ====== 3. 双状态面板 (功能对调核心) ======
         # [上次状态]
-        self.frame_last = tk.LabelFrame(self.root, text=" 上次状态 ", fg=self.colors["gray"], font=('微软雅黑', 10))
+        self.frame_last = tk.LabelFrame(self.root, text=" 上次状态 (点击复制完整网页链接) ", fg=self.colors["gray"], font=('微软雅黑', 9))
         self.frame_last.pack(fill="x", padx=15, pady=5)
         
         last_info_frame = tk.Frame(self.frame_last, cursor="hand2")
@@ -90,17 +90,17 @@ class GitCreatorGUI:
         last_btn_frame.pack(side="right", padx=10, pady=5)
         self.btn_last_web = tk.Button(last_btn_frame, text="🌐 查看", command=lambda: self.open_branch_web("last"), state="disabled")
         self.btn_last_web.pack(fill="x", pady=2)
-        self.btn_last_copy = tk.Button(last_btn_frame, text="🔗 链接", command=lambda: self.copy_branch_url("last"), state="disabled")
+        # 按钮对调：现在复制名称
+        self.btn_last_copy = tk.Button(last_btn_frame, text="🌿 复制名称", command=lambda: self.copy_branch_and_flash("last"), state="disabled")
         self.btn_last_copy.pack(fill="x", pady=2)
 
         # [当前实时状态]
-        self.frame_curr = tk.LabelFrame(self.root, text=" 当前实时状态 ", fg=self.colors["blue"], font=('微软雅黑', 10, 'bold'))
+        self.frame_curr = tk.LabelFrame(self.root, text=" 当前实时状态 (点击复制完整网页链接) ", fg=self.colors["blue"], font=('微软雅黑', 9, 'bold'))
         self.frame_curr.pack(fill="x", padx=15, pady=5)
         
         curr_info_frame = tk.Frame(self.frame_curr, cursor="hand2")
         curr_info_frame.pack(side="left", fill="both", expand=True, padx=10, pady=5)
         
-        # 【修改 2】：当前实时状态也拥有自己的记录显示标签
         self.lbl_curr_msg = tk.Label(curr_info_frame, text="📝 记录: 无", fg="black", font=("微软雅黑", 10, "bold"))
         self.lbl_curr_msg.pack(anchor="w")
         self.lbl_curr_branch = tk.Label(curr_info_frame, text="🌿 分支: 无", font=("Consolas", 12, "bold"), fg="black")
@@ -112,19 +112,21 @@ class GitCreatorGUI:
         curr_btn_frame.pack(side="right", padx=10, pady=5)
         self.btn_curr_web = tk.Button(curr_btn_frame, text="🌐 查看", command=lambda: self.open_branch_web("curr"), state="disabled")
         self.btn_curr_web.pack(fill="x", pady=2)
-        self.btn_curr_copy = tk.Button(curr_btn_frame, text="🔗 链接", command=lambda: self.copy_branch_url("curr"), font=('Arial', 9, 'bold'), state="disabled")
+        # 按钮对调：现在复制名称
+        self.btn_curr_copy = tk.Button(curr_btn_frame, text="🌿 复制名称", command=lambda: self.copy_branch_and_flash("curr"), font=('Arial', 8, 'bold'), state="disabled")
         self.btn_curr_copy.pack(fill="x", pady=2)
 
+        # 绑定对调：主分组框点击事件 -> 复制完整 URL
         for target in [last_info_frame, self.lbl_last_msg, self.lbl_last_branch, self.lbl_last_status]:
-            target.bind("<Button-1>", lambda e: self.copy_branch_and_flash("last"))
+            target.bind("<Button-1>", lambda e: self.copy_url_and_flash("last"))
         for target in [curr_info_frame, self.lbl_curr_msg, self.lbl_curr_branch, self.lbl_curr_status]:
-            target.bind("<Button-1>", lambda e: self.copy_branch_and_flash("curr"))
+            target.bind("<Button-1>", lambda e: self.copy_url_and_flash("curr"))
 
         # --- 4. 核心流水线区 ---
         flow_frame = tk.LabelFrame(self.root, text="🚀 核心流水线", padx=15, pady=10)
         flow_frame.pack(fill="x", padx=15, pady=5)
         
-        self.btn_pipeline = tk.Button(flow_frame, text="📦 一键打包上云\n(点击后输入更新内容 ➔ 建分支 ➔ 推送)", 
+        self.btn_pipeline = tk.Button(flow_frame, text="📦 一键打包上云\n(点击后输入更新内容 ➔ 建分支 ➔ 提交 ➔ 推送)", 
                                       bg="#e3f2fd", font=('微软雅黑', 11, 'bold'), command=self.run_one_click_pipeline, height=2)
         self.btn_pipeline.pack(fill="x")
         
@@ -246,20 +248,31 @@ class GitCreatorGUI:
                     pass 
         except: pass
 
+    # --- 新增功能：复制完整 URL 并带有闪烁反馈 ---
+    def copy_url_and_flash(self, mode):
+        url = self.remote_url.get().replace('.git', '')
+        branch = self.last_branch if mode == "last" else self.curr_branch
+        target_frame = self.frame_last if mode == "last" else self.frame_curr
+        target_lbl = self.lbl_last_branch if mode == "last" else self.lbl_curr_branch
+        
+        if url and branch and branch != "无":
+            full_url = f"{url}/tree/{branch}"
+            pyperclip.copy(full_url)
+            self.flash_effect(target_frame, target_lbl, mode, 0)
+            self.log(f"🔗 已复制完整链接: {full_url}")
+            self.show_gui_alert(f"✅ {mode} 状态网页链接已复制！", self.colors["current"])
+
+    # --- 复制分支名称并带有闪烁反馈 ---
     def copy_branch_and_flash(self, mode):
-        if mode == "last":
-            branch = self.last_branch
-            target_frame = self.frame_last
-            target_lbl = self.lbl_last_branch
-        else:
-            branch = self.curr_branch
-            target_frame = self.frame_curr
-            target_lbl = self.lbl_curr_branch
+        branch = self.last_branch if mode == "last" else self.curr_branch
+        target_frame = self.frame_last if mode == "last" else self.frame_curr
+        target_lbl = self.lbl_last_branch if mode == "last" else self.lbl_curr_branch
 
         if branch and branch != "无" and "获取失败" not in branch:
             pyperclip.copy(branch)
             self.flash_effect(target_frame, target_lbl, mode, 0)
-            self.log(f"📋 已复制分支名: {branch}")
+            self.log(f"📋 已复制分支名称: {branch}")
+            self.show_gui_alert(f"✅ {mode} 分支名称已复制！", self.colors["current"])
 
     def flash_effect(self, frame, lbl, mode, stage):
         sequence = [self.colors["flash1"], self.colors["flash2"], self.colors["flash1"], self.colors["flash2"]]
@@ -273,15 +286,6 @@ class GitCreatorGUI:
         else:
             frame.config(fg=orig_fg)
             lbl.config(fg=orig_lbl_fg)
-
-    def copy_branch_url(self, mode):
-        url = self.remote_url.get().replace('.git', '')
-        branch = self.last_branch if mode == "last" else self.curr_branch
-        if url and branch and branch != "无":
-            full_url = f"{url}/tree/{branch}"
-            pyperclip.copy(full_url)
-            self.log(f"🔗 已复制网页链接，可直接发送给 AI！")
-            self.show_gui_alert(f"✅ {mode} 状态网页链接已复制！", self.colors["current"])
 
     def open_branch_web(self, mode):
         url = self.remote_url.get().replace('.git', '')
@@ -306,7 +310,8 @@ class GitCreatorGUI:
                 if self.lbl_curr_status.cget("text") != clean_msg:
                     self.lbl_curr_status.config(text=clean_msg)
                     has_url = bool(self.remote_url.get())
-                    self.btn_curr_copy.config(state="normal" if is_clean and has_url else "disabled")
+                    # 只有在干净状态下复制按钮才可用，或者自定义控制逻辑
+                    self.btn_curr_copy.config(state="normal" if has_url else "disabled")
             except: pass
         
         self.root.after(2000, self.auto_check_status)
@@ -417,7 +422,7 @@ class GitCreatorGUI:
                 self.curr_branch = repo.active_branch.name
                 self.lbl_curr_branch.config(text=f"🌿 分支: {self.curr_branch}")
                 
-                # 【修改 3】：直接从 Git 底层提取当前分支的真实记录，保证绝对准确
+                # 直接从 Git 底层提取当前分支的真实记录
                 try:
                     latest_commit = repo.head.commit.message.strip().split('\n')[0]
                     if latest_commit.startswith("Auto Wrap: "):
@@ -430,6 +435,7 @@ class GitCreatorGUI:
                 
                 has_url = bool(self.remote_url.get())
                 self.btn_curr_web.config(state="normal" if has_url else "disabled")
+                self.btn_curr_copy.config(state="normal" if has_url else "disabled")
             except:
                 self.lbl_curr_branch.config(text="🌿 分支: 获取失败")
                 self.lbl_curr_msg.config(text="📝 记录: 获取失败")
@@ -479,10 +485,10 @@ class GitCreatorGUI:
             self.show_gui_alert("⏳ 正在创建时间分支并推送至云端...", "blue")
             self.root.update()
 
-            # 【修改 4】：移交逻辑修复。把真正的旧状态移交给“上次状态”
+            # 状态移交：先把当前显示的内容给“上次状态”
             self.last_branch = self.curr_branch
-            self.lbl_last_msg.config(text=self.lbl_curr_msg.cget("text")) # 把旧记录给它
-            self.lbl_last_branch.config(text=self.lbl_curr_branch.cget("text")) # 把旧分支名给它
+            self.lbl_last_msg.config(text=self.lbl_curr_msg.cget("text"))
+            self.lbl_last_branch.config(text=self.lbl_curr_branch.cget("text"))
             self.lbl_last_status.config(text="✅ 历史状态归档")
             
             self.btn_last_web.config(state="normal")
@@ -503,9 +509,9 @@ class GitCreatorGUI:
             origin.set_url(url)
             origin.push(branch_name, force=True, set_upstream=True)
 
-            # 打包完成后调用 update_status，它会自动把刚才提交的 custom_msg 读取并显示在“当前实时状态”中
+            # 打包完成后立即刷新，此时 update_status 会去读最新的 commit message
             self.update_status() 
-            self.copy_branch_url("curr")
+            self.copy_url_and_flash("curr") # 自动复制刚生成的链接
             
             self.show_gui_alert("✅ 时间分支打包上云成功！", self.colors["current"])
             self.log("✅ 代码流水线执行完毕，新时间分支已上云。")
