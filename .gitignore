@@ -1,3 +1,18 @@
 git_helper_history.log
 git_helper_config.json
 git_helper_data.db
+# Git Helper 自身文件
+# Python 打包与编译垃圾
+__pycache__/
+*.pyc
+build/
+dist/
+*.exe
+*.spec
+# 自动化测试与浏览器缓存 (webqu 专属)
+browser_data/
+browser_data_safe/
+# 虚拟环境与前端依赖
+venv/
+.venv/
+node_modules/

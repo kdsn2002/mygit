@@ -15,7 +15,7 @@ from datetime import datetime
 class GitCreatorGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("KDSN Git Helper - 终极流水线版 (带物理超度 + 自动复活)")
+        self.root.title("KDSN Git Helper - 终极流水线版 (带 AI 防爆盾)")
         self.root.geometry("620x800") 
         
         self.config_file = "git_helper_config.json"
@@ -121,7 +121,6 @@ class GitCreatorGUI:
         log_ctrl_frame.pack(fill="x", padx=15, pady=(5, 0))
         tk.Label(log_ctrl_frame, text="📄 操作日志", font=('微软雅黑', 9, 'bold'), fg="gray").pack(side="left")
         
-        # 【新增】：复制全部按钮
         tk.Button(log_ctrl_frame, text="🧹 清空", command=self.clear_logs, font=('微软雅黑', 8), cursor="hand2", bg="#f5f5f5").pack(side="right", padx=(5, 0))
         tk.Button(log_ctrl_frame, text="📋 复制全部", command=self.copy_all_logs, font=('微软雅黑', 8), cursor="hand2", bg="#e8f5e9").pack(side="right")
 
@@ -169,7 +168,6 @@ class GitCreatorGUI:
         except: pass
         self.log("🧹 历史日志已瞬间清空。")
 
-    # --- 【新增】：复制全部日志功能 ---
     def copy_all_logs(self):
         content = self.log_area.get('1.0', tk.END).strip()
         if content:
@@ -200,15 +198,27 @@ class GitCreatorGUI:
                 self.log(f"🔄 自动恢复项目: {os.path.basename(path)}")
                 break
 
+    # --- 【重点升级：AI 防爆盾】全自动拦截与清洗垃圾文件 ---
     def enforce_gitignore(self, repo, path):
-        ignores = ['git_helper_history.log', 'git_helper_config.json', 'git_helper_data.db']
-        gitignore_path = os.path.join(path, '.gitignore')
+        # 1. 定义我们要拦截的“AI 杀手”文件和目录
+        ignores = [
+            '# Git Helper 自身文件',
+            'git_helper_history.log', 'git_helper_config.json', 'git_helper_data.db',
+            '# Python 打包与编译垃圾',
+            '__pycache__/', '*.pyc', 'build/', 'dist/', '*.exe', '*.spec',
+            '# 自动化测试与浏览器缓存 (webqu 专属)',
+            'browser_data/', 'browser_data_safe/',
+            '# 虚拟环境与前端依赖',
+            'venv/', '.venv/', 'node_modules/'
+        ]
         
+        gitignore_path = os.path.join(path, '.gitignore')
         content = ""
         if os.path.exists(gitignore_path):
             with open(gitignore_path, 'r', encoding='utf-8') as f:
                 content = f.read()
         
+        # 2. 将缺失的规则追加进 .gitignore
         with open(gitignore_path, 'a', encoding='utf-8') as f:
             for item in ignores:
                 if item not in content:
@@ -217,8 +227,14 @@ class GitCreatorGUI:
                     f.write(f"{item}\n")
                     content += f"{item}\n"
         
+        # 3. 强力清洗：如果这些垃圾之前已经不小心提交过了，用 rm --cached 踢出索引
         try:
-            repo.git.rm('--cached', 'git_helper_history.log', 'git_helper_config.json', 'git_helper_data.db', ignore_unmatch=True)
+            # 遍历核心的危险目录进行清理
+            for junk in ['__pycache__', 'build', 'dist', 'browser_data', 'browser_data_safe', '*.pyc', '*.exe', 'git_helper_history.log', 'git_helper_config.json', 'git_helper_data.db']:
+                try:
+                    repo.git.rm('-r', '--cached', junk, ignore_unmatch=True)
+                except:
+                    pass # 如果本来就不在缓存里，静默忽略
         except: pass
 
     def copy_branch_and_flash(self, mode):
@@ -344,7 +360,6 @@ class GitCreatorGUI:
             repo.git.add(A=True)
             repo.index.commit(f"Auto Wrap: {branch_name}")
 
-            # 【新增】：在推送前，打印我们要推送的目标 URL，方便排错
             self.log(f"📡 正在尝试连线推送到: {url}")
             
             origin = repo.remote('origin') if 'origin' in repo.remotes else repo.create_remote('origin', url)
