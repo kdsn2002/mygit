@@ -11,8 +11,8 @@ from datetime import datetime
 class GitCreatorGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("KDSN Git Helper - 终极流水线版")
-        self.root.geometry("620x720")
+        self.root.title("KDSN Git Helper - 严谨防呆版")
+        self.root.geometry("620x760")
         
         # 1. 核心配置与样式
         self.config_file = "git_helper_config.json"
@@ -33,70 +33,75 @@ class GitCreatorGUI:
         self.auto_load_last_project()
 
     def setup_ui(self):
-        # --- 顶部大容器 (分左右两列) ---
-        top_frame = tk.Frame(self.root)
-        top_frame.pack(fill="x", padx=15, pady=5)
-        
-        left_frame = tk.Frame(top_frame)
-        left_frame.pack(side="left", fill="both", expand=True)
-        
-        right_frame = tk.Frame(top_frame)
-        right_frame.pack(side="right", fill="y", padx=(10, 0), pady=5)
+        # --- 顶部功能区 ---
+        tk.Button(self.root, text="⚙️ 仓库配置 (需配置远程 URL 才能生链接)", command=self.open_settings, font=('Arial', 9)).pack(fill="x", padx=15, pady=(10, 5))
 
-        # ====== 左侧：双状态面板 ======
+        # ====== 双状态面板 (内嵌独立操作按钮) ======
         # --- 上次状态 ---
-        self.frame_last = tk.LabelFrame(left_frame, text=" 上次状态 (点击复制分支) ", fg=self.colors["gray"], font=('微软雅黑', 9), cursor="hand2")
-        self.frame_last.pack(fill="x", pady=2)
+        self.frame_last = tk.LabelFrame(self.root, text=" 上次状态 ", fg=self.colors["gray"], font=('微软雅黑', 9))
+        self.frame_last.pack(fill="x", padx=15, pady=5)
         
-        self.lbl_last_repo = tk.Label(self.frame_last, text="📁 仓库: 无", fg="gray", font=("微软雅黑", 9))
+        last_info_frame = tk.Frame(self.frame_last, cursor="hand2")
+        last_info_frame.pack(side="left", fill="both", expand=True, padx=10, pady=5)
+        
+        self.lbl_last_repo = tk.Label(last_info_frame, text="📁 仓库: 无", fg="gray", font=("微软雅黑", 9))
         self.lbl_last_repo.pack(anchor="w")
-        self.lbl_last_branch = tk.Label(self.frame_last, text="🌿 分支: 无", font=("Consolas", 10), fg="gray")
+        self.lbl_last_branch = tk.Label(last_info_frame, text="🌿 分支: 无", font=("Consolas", 10), fg="gray")
         self.lbl_last_branch.pack(anchor="w")
-        self.lbl_last_status = tk.Label(self.frame_last, text="...", fg="gray", font=("微软雅黑", 9))
+        self.lbl_last_status = tk.Label(last_info_frame, text="...", fg="gray", font=("微软雅黑", 9))
         self.lbl_last_status.pack(anchor="w")
 
+        last_btn_frame = tk.Frame(self.frame_last)
+        last_btn_frame.pack(side="right", padx=10, pady=5)
+        self.btn_last_web = tk.Button(last_btn_frame, text="🌐 查看", command=lambda: self.open_branch_web("last"), state="disabled")
+        self.btn_last_web.pack(fill="x", pady=2)
+        self.btn_last_copy = tk.Button(last_btn_frame, text="🔗 复制链接", command=lambda: self.copy_branch_url("last"), state="disabled")
+        self.btn_last_copy.pack(fill="x", pady=2)
+
         # --- 当前实时状态 ---
-        self.frame_curr = tk.LabelFrame(left_frame, text=" 当前实时状态 (点击复制分支) ", fg=self.colors["blue"], font=('微软雅黑', 10, 'bold'), cursor="hand2")
-        self.frame_curr.pack(fill="x", pady=2)
+        self.frame_curr = tk.LabelFrame(self.root, text=" 当前实时状态 ", fg=self.colors["blue"], font=('微软雅黑', 10, 'bold'))
+        self.frame_curr.pack(fill="x", padx=15, pady=5)
         
-        self.lbl_curr_repo = tk.Label(self.frame_curr, text="📁 仓库: [等待选择]", fg=self.colors["repo_name"], font=("微软雅黑", 10, "bold"))
+        curr_info_frame = tk.Frame(self.frame_curr, cursor="hand2")
+        curr_info_frame.pack(side="left", fill="both", expand=True, padx=10, pady=5)
+        
+        self.lbl_curr_repo = tk.Label(curr_info_frame, text="📁 仓库: [等待选择]", fg=self.colors["repo_name"], font=("微软雅黑", 10, "bold"))
         self.lbl_curr_repo.pack(anchor="w")
-        self.lbl_curr_branch = tk.Label(self.frame_curr, text="🌿 分支: 无", font=("Consolas", 12, "bold"), fg="black")
+        self.lbl_curr_branch = tk.Label(curr_info_frame, text="🌿 分支: 无", font=("Consolas", 12, "bold"), fg="black")
         self.lbl_curr_branch.pack(anchor="w")
-        self.lbl_curr_status = tk.Label(self.frame_curr, text="请检测状态...", font=("微软雅黑", 10))
+        self.lbl_curr_status = tk.Label(curr_info_frame, text="请检测状态...", font=("微软雅黑", 10))
         self.lbl_curr_status.pack(anchor="w")
 
-        # 绑定点击复制和闪烁
-        for target in [self.frame_last, self.lbl_last_repo, self.lbl_last_branch, self.lbl_last_status]:
-            target.bind("<Button-1>", lambda e: self.copy_branch_and_flash("last"))
-        for target in [self.frame_curr, self.lbl_curr_repo, self.lbl_curr_branch, self.lbl_curr_status]:
-            target.bind("<Button-1>", lambda e: self.copy_branch_and_flash("curr"))
+        curr_btn_frame = tk.Frame(self.frame_curr)
+        curr_btn_frame.pack(side="right", padx=10, pady=5)
+        self.btn_curr_web = tk.Button(curr_btn_frame, text="🌐 查看", command=lambda: self.open_branch_web("curr"), state="disabled")
+        self.btn_curr_web.pack(fill="x", pady=2)
+        self.btn_curr_copy = tk.Button(curr_btn_frame, text="🔗 复制链接", command=lambda: self.copy_branch_url("curr"), font=('Arial', 9, 'bold'), state="disabled")
+        self.btn_curr_copy.pack(fill="x", pady=2)
 
-        # ====== 右侧：功能按钮组 ======
-        tk.Button(right_frame, text="⚙️ 仓库配置", command=self.open_settings, font=('Arial', 8)).pack(fill="x", pady=3)
-        tk.Button(right_frame, text="🌐 查看分支", command=self.open_branch_web, font=('Arial', 8)).pack(fill="x", pady=3)
-        
-        # 【新增】：智能复制网址按钮（默认为灰）
-        self.btn_copy_url = tk.Button(right_frame, text="🔗 复制网页链接", command=self.copy_branch_url, font=('Arial', 8, 'bold'), state="disabled")
-        self.btn_copy_url.pack(fill="x", pady=3)
+        # 绑定点击复制分支名和闪烁
+        for target in [last_info_frame, self.lbl_last_repo, self.lbl_last_branch, self.lbl_last_status]:
+            target.bind("<Button-1>", lambda e: self.copy_branch_and_flash("last"))
+        for target in [curr_info_frame, self.lbl_curr_repo, self.lbl_curr_branch, self.lbl_curr_status]:
+            target.bind("<Button-1>", lambda e: self.copy_branch_and_flash("curr"))
 
         # --- 路径选择 ---
         path_frame = tk.Frame(self.root)
-        path_frame.pack(fill="x", padx=20, pady=5)
+        path_frame.pack(fill="x", padx=15, pady=10)
         tk.Entry(path_frame, textvariable=self.repo_path, state='readonly').pack(side="left", fill="x", expand=True, padx=(0, 5))
-        tk.Button(path_frame, text="切换项目", command=self.select_dir).pack(side="right")
+        tk.Button(path_frame, text="切换项目目录", command=self.select_dir).pack(side="right")
 
-        # --- 核心流水线 (合并为一个大按钮) ---
-        flow_frame = tk.LabelFrame(self.root, text="🚀 核心流水线", padx=15, pady=15)
-        flow_frame.pack(fill="x", padx=20, pady=10)
+        # --- 核心流水线 (强力防重复提交) ---
+        flow_frame = tk.LabelFrame(self.root, text="🚀 核心流水线 (自动防浪费保护)", padx=15, pady=15)
+        flow_frame.pack(fill="x", padx=15, pady=5)
 
-        self.btn_pipeline = tk.Button(flow_frame, text="📦 一键打包上云\n(建时间分支 ➔ 提交改动 ➔ 推送)", 
-                                      bg="#e3f2fd", font=('微软雅黑', 11, 'bold'), command=self.run_one_click_pipeline, height=2)
+        self.btn_pipeline = tk.Button(flow_frame, text="📦 一键打包上云\n(无改动自动拦截 | 有改动自动建时间分支推云端)", 
+                                      bg="#e3f2fd", font=('微软雅黑', 10, 'bold'), command=self.run_one_click_pipeline, height=2)
         self.btn_pipeline.pack(fill="x", pady=5)
 
         # --- 日志区域 ---
         self.log_area = scrolledtext.ScrolledText(self.root, height=10, font=('Consolas', 9))
-        self.log_area.pack(fill="both", padx=20, pady=5, expand=True)
+        self.log_area.pack(fill="both", padx=15, pady=10, expand=True)
 
     # --- 启动恢复逻辑 ---
     def auto_load_last_project(self):
@@ -115,7 +120,7 @@ class GitCreatorGUI:
                 self.update_status()
                 break
 
-    # --- 交互反馈 (区分上次和本次闪烁) ---
+    # --- 交互反馈 ---
     def copy_branch_and_flash(self, mode):
         if mode == "last":
             branch = self.last_branch
@@ -144,19 +149,21 @@ class GitCreatorGUI:
             frame.config(fg=orig_fg)
             lbl.config(fg=orig_lbl_fg)
 
-    # --- 智能获取网页直达链接 ---
-    def copy_branch_url(self):
+    # --- 独立 URL 获取与网页打开 ---
+    def copy_branch_url(self, mode):
         url = self.remote_url.get().replace('.git', '')
-        if url and self.curr_branch and self.curr_branch != "无":
-            full_url = f"{url}/tree/{self.curr_branch}"
+        branch = self.last_branch if mode == "last" else self.curr_branch
+        if url and branch and branch != "无":
+            full_url = f"{url}/tree/{branch}"
             pyperclip.copy(full_url)
-            self.log(f"🔗 已提取并复制源码网页链接！")
-            messagebox.showinfo("链接已就绪", "网页直达链接已在剪贴板，快去发给 Gemini 吧！")
+            self.log(f"🔗 已复制 {mode} 状态网页链接！")
+            messagebox.showinfo("链接已复制", f"已复制 {mode} 状态的直达链接：\n{full_url}")
 
-    def open_branch_web(self):
+    def open_branch_web(self, mode):
         url = self.remote_url.get().replace('.git', '')
-        if url and self.curr_branch and self.curr_branch != "无":
-            webbrowser.open(f"{url}/tree/{self.curr_branch}")
+        branch = self.last_branch if mode == "last" else self.curr_branch
+        if url and branch and branch != "无":
+            webbrowser.open(f"{url}/tree/{branch}")
 
     # --- 核心逻辑 ---
     def get_formatted_time(self):
@@ -175,71 +182,77 @@ class GitCreatorGUI:
                 
                 status_raw = repo.git.status()
                 is_clean = "nothing to commit, working tree clean" in status_raw
-                clean_msg = "✅ 现场干净，可以去 PR 了" if is_clean else "⚠️ 有改动，请先打包上云"
+                clean_msg = "✅ 现场干净，无需重复打包" if is_clean else "⚠️ 有新改动，请点击打包上云"
                 self.lbl_curr_status.config(text=clean_msg)
                 
-                # 【关键点】：如果是干净的（意味着已提交/刚推送过），就点亮第三条按钮！否则变灰。
-                self.btn_copy_url.config(state="normal" if is_clean else "disabled")
+                # 按钮点亮逻辑
+                has_url = bool(self.remote_url.get())
+                self.btn_curr_web.config(state="normal" if has_url else "disabled")
+                # 只有现场干净且有 URL 才允许复制链接
+                self.btn_curr_copy.config(state="normal" if is_clean and has_url else "disabled")
                 
             except:
                 self.lbl_curr_branch.config(text="🌿 分支: 获取失败")
                 self.lbl_curr_status.config(text="❌ 仓库读取异常")
-                self.btn_copy_url.config(state="disabled")
         else:
             self.lbl_curr_repo.config(text="📁 仓库: 未选择")
             self.lbl_curr_branch.config(text="🌿 分支: 无")
             self.lbl_curr_status.config(text="未初始化 Git 仓库")
-            self.btn_copy_url.config(state="disabled")
 
-    # --- 【重点】合并后的一键流水线 ---
+    # --- 【重点防呆】流水线拦截 ---
     def run_one_click_pipeline(self):
         path = self.repo_path.get()
         url = self.remote_url.get()
         if not path or not url: 
-            messagebox.showwarning("警告", "请确保路径已选择且 URL 已配置。")
+            messagebox.showwarning("警告", "请先选择项目目录并在上方配置远程 URL。")
             return
             
         try:
             repo = git.Repo(path)
             status_raw = repo.git.status()
-            is_clean = "nothing to commit" in status_raw
+            is_clean = "nothing to commit, working tree clean" in status_raw
             
-            # 1. 现场保护：如果没有改动，询问是否还要强行建分支
+            # 【核心保护】：如果现场干净，强行拦截！
             if is_clean:
-                if not messagebox.askyesno("提示", "当前没有检测到代码改动（现场是干净的）。\n确定还要新建一个时间分支并推送吗？"):
-                    return
+                messagebox.showinfo("拦截保护", "检测到您的代码【没有任何新修改】。\n为了节约资源，系统拒绝执行重复的打包推送操作。\n\n请先去改动代码，再来点击。")
+                self.log("🛡️ 已拦截无意义的重复打包。")
+                return
 
-            # 2. 状态移交 (将当前UI内容移交给上次状态)
+            # 如果确实有改动，开始正常流水线作业
+            # 1. 状态移交
             self.last_branch = self.curr_branch
             self.lbl_last_repo.config(text=self.lbl_curr_repo.cget("text"))
             self.lbl_last_branch.config(text=self.lbl_curr_branch.cget("text"))
-            self.lbl_last_status.config(text=self.lbl_curr_status.cget("text"))
+            self.lbl_last_status.config(text="✅ 历史状态归档")
+            self.btn_last_web.config(state="normal")
+            self.btn_last_copy.config(state="normal")
 
-            # 3. 创建时间分支
+            # 2. 创建时间分支
             branch_name = self.get_formatted_time()
             repo.create_head(branch_name).checkout()
-            self.log(f"🌱 已创建纯时间分支: {branch_name}")
+            self.log(f"🌱 创建纯时间分支: {branch_name}")
 
-            # 4. 提交改动
-            if not is_clean:
-                repo.git.add(A=True)
-                repo.index.commit(f"Auto Wrap: {branch_name}")
-                self.log(f"📦 已打包本地改动。")
+            # 3. 提交改动
+            repo.git.add(A=True)
+            repo.index.commit(f"Auto Wrap: {branch_name}")
+            self.log(f"📦 已打包本地新改动。")
 
-            # 5. 推送云端
+            # 4. 推送云端
             origin = repo.remote('origin') if 'origin' in repo.remotes else repo.create_remote('origin', url)
             origin.set_url(url)
             self.log(f"🚀 正在推送到 GitHub...")
             origin.push(branch_name, force=True)
             self.log("✅ 代码已安全上云！")
 
-            # 6. 刷新界面 (此时现场一定干净，复制按钮会自动变亮)
+            # 5. 刷新界面
             self.update_status()
+            # 自动复制新链接
+            self.copy_branch_url("curr")
 
         except Exception as e:
             self.log(f"❌ 流水线失败: {e}")
 
-    # --- 存档与基础设置 ---
+    # --- 存档与设置 ---
     def load_config(self):
         if os.path.exists(self.config_file):
             with open(self.config_file, 'r') as f: return json.load(f)
@@ -267,7 +280,7 @@ class GitCreatorGUI:
         tk.Label(win, text="远程 GitHub URL:").pack(pady=5)
         ent = tk.Entry(win, textvariable=self.remote_url, width=45)
         ent.pack(pady=5)
-        tk.Button(win, text="保存并初始化", command=lambda: self.save_and_init(win)).pack(pady=10)
+        tk.Button(win, text="保存 URL 配置", command=lambda: self.save_and_init(win)).pack(pady=10)
 
     def save_and_init(self, win):
         path = self.repo_path.get()
