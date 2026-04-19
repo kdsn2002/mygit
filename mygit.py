@@ -56,7 +56,7 @@ class GitCreatorGUI:
         header_frame.pack(fill="x", padx=15, pady=(15, 5))
 
         tk.Button(header_frame, text="⚙️ 仓库配置", command=self.open_settings, font=('Arial', 10, 'bold'), bg="#f0f0f0").pack(side="left")
-        tk.Button(header_frame, text="🗂️ 历史分支", command=self.open_history_window, font=('Arial', 10, 'bold'), bg="#e8f5e9").pack(side="left", padx=(10, 0))
+        tk.Button(header_frame, text="🗂️ 历史", command=self.open_history_window, font=('Arial', 10, 'bold'), bg="#e8f5e9").pack(side="left", padx=(10, 0))
         
         self.lbl_main_repo = tk.Label(header_frame, text="[未选择仓库]", fg="red", font=("微软雅黑", 15, "bold"))
         self.lbl_main_repo.pack(side="left", expand=True)
