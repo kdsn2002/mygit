@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext, Toplevel
+from tkinter import ttk
 import git
 import os
 import time
@@ -12,7 +13,7 @@ from datetime import datetime
 class GitCreatorGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("KDSN Git Helper - 主分支直推版 (专为 AI 投喂打造)")
+        self.root.title("KDSN Git Helper - 终极流水线版 (恢复时间分支 + 下拉记忆)")
         self.root.geometry("620x800") 
         
         self.config_file = "git_helper_config.json"
@@ -92,22 +93,28 @@ class GitCreatorGUI:
         for target in [curr_info_frame, self.lbl_curr_repo, self.lbl_curr_branch, self.lbl_curr_status]:
             target.bind("<Button-1>", lambda e: self.copy_branch_and_flash("curr"))
 
+        # --- 下拉框选择路径 ---
         path_frame = tk.Frame(self.root)
-        path_frame.pack(fill="x", padx=15, pady=5)
-        tk.Entry(path_frame, textvariable=self.repo_path, state='readonly').pack(side="left", fill="x", expand=True, padx=(0, 5))
-        tk.Button(path_frame, text="切换项目目录", command=self.select_dir).pack(side="right")
+        path_frame.pack(fill="x", padx=15, pady=10)
+        
+        self.combo_path = ttk.Combobox(path_frame, textvariable=self.repo_path, state='readonly', font=('Arial', 9))
+        self.combo_path.pack(side="left", fill="x", expand=True, padx=(0, 5))
+        self.combo_path.bind("<<ComboboxSelected>>", self.on_combo_select)
+        
+        tk.Button(path_frame, text="📁 浏览新目录", command=self.select_dir).pack(side="right")
 
+        # --- 核心流水线 ---
         flow_frame = tk.LabelFrame(self.root, text="🚀 核心流水线", padx=15, pady=10)
         flow_frame.pack(fill="x", padx=15, pady=5)
 
-        self.btn_pipeline = tk.Button(flow_frame, text="📦 一键打包直达主分支\n(无弹窗 | 自动拦截 | 强制推送 main)", 
+        self.btn_pipeline = tk.Button(flow_frame, text="📦 一键打包上云\n(建时间分支 ➔ 提交 ➔ 推送)", 
                                       bg="#e3f2fd", font=('微软雅黑', 10, 'bold'), command=self.run_one_click_pipeline, height=2)
         self.btn_pipeline.pack(fill="x", pady=2)
         
         self.lbl_gui_alert = tk.Label(flow_frame, text="", font=("微软雅黑", 10, "bold"))
         self.lbl_gui_alert.pack(fill="x")
 
-        # --- 日志控制条（含清空按钮） ---
+        # --- 日志控制条 ---
         log_ctrl_frame = tk.Frame(self.root)
         log_ctrl_frame.pack(fill="x", padx=15, pady=(5, 0))
         tk.Label(log_ctrl_frame, text="📄 操作日志", font=('微软雅黑', 9, 'bold'), fg="gray").pack(side="left")
@@ -145,27 +152,24 @@ class GitCreatorGUI:
             self.db_conn.commit()
         except: pass
 
-    # --- 【修改】：瞬间清空日志功能，拒绝弹窗 ---
     def clear_logs(self):
-        # 1. 清空 GUI 面板
         self.log_area.delete('1.0', tk.END)
-        
-        # 2. 清空 SQLite 数据库里的记录（表还在，只是数据没了）
         try:
             self.cursor.execute("DELETE FROM logs")
             self.db_conn.commit()
         except: pass
-        
-        # 3. 清空外部 txt 日志文件内容
         try:
             with open("git_helper_history.log", "w", encoding="utf-8") as f:
                 pass 
         except: pass
-        
-        # 4. 留下新的起点提示
         self.log("🧹 历史日志已瞬间清空。")
 
+    def update_combo_values(self):
+        paths = [p for p in self.config_data.keys() if p != "last_opened" and os.path.exists(p)]
+        self.combo_path['values'] = paths
+
     def auto_load_last_project(self):
+        self.update_combo_values()
         if "last_opened" in self.config_data:
             last_path = self.config_data["last_opened"]
             if os.path.exists(last_path):
@@ -247,6 +251,11 @@ class GitCreatorGUI:
             webbrowser.open(f"{url}/tree/{branch}")
             self.log("🌐 已在浏览器中打开分支")
 
+    # --- 【重加回来的关键函数！】 ---
+    def get_formatted_time(self):
+        now = datetime.now()
+        return f"{now.year}-{now.month}-{now.day}--{now.strftime('%H-%M-%S')}"
+
     def update_status(self):
         path = self.repo_path.get()
         if path and os.path.exists(os.path.join(path, '.git')):
@@ -291,12 +300,15 @@ class GitCreatorGUI:
             status_raw = repo.git.status()
             is_clean = "nothing to commit, working tree clean" in status_raw
             
+            # 柔性拦截
             if is_clean:
-                self.show_gui_alert("🛡️ 拦截：代码无改动，拒绝浪费资源的重复打包！", self.colors["alert"])
-                self.log("🛡️ 已拦截无意义的重复打包。")
-                return
+                if not messagebox.askyesno("异常同步提示", "当前代码没有检测到任何新改动。\n\n如果您刚刚删除了云端仓库并重新创建，或者由于其他原因云端数据丢失，请点击【是】强行新建时间分支并同步。\n\n否则请点击【否】取消操作。"):
+                    self.show_gui_alert("🛡️ 已取消打包推送。", self.colors["alert"])
+                    return
+                else:
+                    self.log("⚠️ 触发强制同步模式...")
 
-            self.show_gui_alert("⏳ 正在打包并强制推送至 main 主分支...", "blue")
+            self.show_gui_alert("⏳ 正在创建时间分支并推送至云端...", "blue")
             self.root.update()
 
             self.last_branch = self.curr_branch
@@ -306,25 +318,25 @@ class GitCreatorGUI:
             self.btn_last_web.config(state="normal")
             self.btn_last_copy.config(state="normal")
 
-            target_branch = "main"
+            # 恢复时间分支创建逻辑
+            branch_name = self.get_formatted_time()
             try:
-                repo.git.checkout('-B', target_branch)
-            except Exception as e:
-                pass
+                repo.git.checkout('-b', branch_name)
+            except Exception:
+                repo.git.checkout('-B', branch_name)
 
             repo.git.add(A=True)
-            current_time = time.strftime('%Y-%m-%d %H:%M:%S')
-            repo.index.commit(f"Auto Wrap (Direct Main): {current_time}")
+            repo.index.commit(f"Auto Wrap: {branch_name}")
 
             origin = repo.remote('origin') if 'origin' in repo.remotes else repo.create_remote('origin', url)
             origin.set_url(url)
-            origin.push(target_branch, force=True, set_upstream=True)
+            origin.push(branch_name, force=True, set_upstream=True)
 
             self.update_status()
             self.copy_branch_url("curr")
             
-            self.show_gui_alert("✅ 成功强推至 main！AI 已可瞬间读取！", self.colors["current"])
-            self.log("✅ 代码流水线执行完毕，主分支已更新。")
+            self.show_gui_alert("✅ 时间分支打包上云成功！", self.colors["current"])
+            self.log("✅ 代码流水线执行完毕，新时间分支已上云。")
 
         except Exception as e:
             self.log(f"❌ 流水线失败: {e}")
@@ -338,6 +350,23 @@ class GitCreatorGUI:
     def save_config(self):
         self.config_data["last_opened"] = self.repo_path.get()
         with open(self.config_file, 'w') as f: json.dump(self.config_data, f)
+        self.update_combo_values() 
+
+    def on_combo_select(self, event):
+        path = self.repo_path.get()
+        if path and os.path.exists(path):
+            self.remote_url.set(self.config_data.get(path, ""))
+            
+            self.last_branch = "无"
+            self.lbl_last_repo.config(text="📁 仓库: 无")
+            self.lbl_last_branch.config(text="🌿 分支: 无")
+            self.lbl_last_status.config(text="...")
+            self.btn_last_web.config(state="disabled")
+            self.btn_last_copy.config(state="disabled")
+            
+            self.update_status()
+            self.save_config() 
+            self.log(f"📂 下拉切换项目至: {os.path.basename(path)}")
 
     def select_dir(self):
         path = filedialog.askdirectory()
@@ -354,8 +383,7 @@ class GitCreatorGUI:
             
             self.update_status()
             self.save_config() 
-            
-            self.log(f"📁 切换项目目录至: {os.path.basename(path)}")
+            self.log(f"📁 浏览切换项目至: {os.path.basename(path)}")
 
     def open_settings(self):
         path = self.repo_path.get()
