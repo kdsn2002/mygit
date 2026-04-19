@@ -120,7 +120,10 @@ class GitCreatorGUI:
         log_ctrl_frame = tk.Frame(self.root)
         log_ctrl_frame.pack(fill="x", padx=15, pady=(5, 0))
         tk.Label(log_ctrl_frame, text="📄 操作日志", font=('微软雅黑', 9, 'bold'), fg="gray").pack(side="left")
-        tk.Button(log_ctrl_frame, text="🧹 清空日志", command=self.clear_logs, font=('微软雅黑', 8), cursor="hand2", bg="#f5f5f5").pack(side="right")
+        
+        # 【新增】：复制全部按钮
+        tk.Button(log_ctrl_frame, text="🧹 清空", command=self.clear_logs, font=('微软雅黑', 8), cursor="hand2", bg="#f5f5f5").pack(side="right", padx=(5, 0))
+        tk.Button(log_ctrl_frame, text="📋 复制全部", command=self.copy_all_logs, font=('微软雅黑', 8), cursor="hand2", bg="#e8f5e9").pack(side="right")
 
         # --- 日志区域 ---
         self.log_area = scrolledtext.ScrolledText(self.root, height=12, font=('Consolas', 9))
@@ -165,6 +168,15 @@ class GitCreatorGUI:
                 pass 
         except: pass
         self.log("🧹 历史日志已瞬间清空。")
+
+    # --- 【新增】：复制全部日志功能 ---
+    def copy_all_logs(self):
+        content = self.log_area.get('1.0', tk.END).strip()
+        if content:
+            pyperclip.copy(content)
+            self.show_gui_alert("📋 日志已全部复制到剪贴板！", self.colors["current"])
+        else:
+            self.show_gui_alert("⚠️ 日志为空", self.colors["alert"])
 
     def update_combo_values(self):
         paths = [p for p in self.config_data.keys() if p != "last_opened" and os.path.exists(p)]
@@ -297,17 +309,15 @@ class GitCreatorGUI:
             return
             
         try:
-            # 【新增防呆机制】：如果刚刚物理超度了，流水线自动接盘复活，无需用户操心！
             if not os.path.exists(os.path.join(path, '.git')):
                 git.Repo.init(path)
                 self.log(f"🌱 发现空白状态，流水线已自动为你执行 git init")
-                self.update_status() # 刷新一下状态让面板知道活过来了
+                self.update_status() 
 
             repo = git.Repo(path)
             status_raw = repo.git.status()
             is_clean = "nothing to commit, working tree clean" in status_raw
             
-            # 柔性拦截
             if is_clean:
                 if not messagebox.askyesno("异常同步提示", "当前代码没有检测到任何新改动。\n\n如果您刚刚删除了云端仓库并重新创建，或者由于其他原因云端数据丢失，请点击【是】强行新建时间分支并同步。\n\n否则请点击【否】取消操作。"):
                     self.show_gui_alert("🛡️ 已取消打包推送。", self.colors["alert"])
@@ -334,6 +344,9 @@ class GitCreatorGUI:
             repo.git.add(A=True)
             repo.index.commit(f"Auto Wrap: {branch_name}")
 
+            # 【新增】：在推送前，打印我们要推送的目标 URL，方便排错
+            self.log(f"📡 正在尝试连线推送到: {url}")
+            
             origin = repo.remote('origin') if 'origin' in repo.remotes else repo.create_remote('origin', url)
             origin.set_url(url)
             origin.push(branch_name, force=True, set_upstream=True)
@@ -409,7 +422,6 @@ class GitCreatorGUI:
                 self.log(f"🔥 已成功摧毁本地影子库记忆: {os.path.basename(path)}")
                 self.update_status() 
                 win.destroy() 
-                # 【修改】：文案更自信，告诉用户可以直接去点打包了
                 messagebox.showinfo("超度成功", "本地影子库已被彻底物理粉碎！\n\n系统已进入无感复活模式，请直接点击【📦 一键打包上云】，一切将自动从零开始！")
             except Exception as e:
                 messagebox.showerror("删除失败", f"删除 .git 文件夹时出错，请确保没有其他软件（如 VSCode）正在占用该文件夹:\n{e}")
