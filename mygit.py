@@ -115,7 +115,7 @@ class GitCreatorGUI:
                                       bg="#e3f2fd", font=('微软雅黑', 10, 'bold'), command=self.run_one_click_pipeline, height=2)
         self.btn_pipeline.pack(fill="x", pady=2)
         
-        # 【新增】：专门用来显示成功或拦截信息的 GUI 文字屏 (替代弹窗)
+        # 专门用来显示成功或拦截信息的 GUI 文字屏 (替代弹窗)
         self.lbl_gui_alert = tk.Label(flow_frame, text="", font=("微软雅黑", 10, "bold"))
         self.lbl_gui_alert.pack(fill="x")
 
@@ -137,23 +137,23 @@ class GitCreatorGUI:
             if rows:
                 self.log_area.insert(tk.END, "--- 数据库历史记录载入 ---\n")
                 for row in reversed(rows):
-                    short_t = row[0].split(" ")[1] if " " in row[0] else row[0]
-                    self.log_area.insert(tk.END, f"[{short_t}] {row[1]}\n")
+                    # 修正点：不再截取时间，直接显示完整的 年-月-日 时:分:秒
+                    self.log_area.insert(tk.END, f"[{row[0]}] {row[1]}\n")
                 self.log_area.insert(tk.END, "------------------------\n\n")
                 self.log_area.see(tk.END)
         except Exception as e:
             print("读取数据库失败", e)
 
     def log(self, message):
-        short_time = time.strftime('%H:%M:%S')
-        long_time = time.strftime('%Y-%m-%d %H:%M:%S')
-        log_line = f"[{short_time}] {message}\n"
+        # 修正点：统一采用完整的 年-月-日 时:分:秒 格式
+        full_time = time.strftime('%Y-%m-%d %H:%M:%S')
+        log_line = f"[{full_time}] {message}\n"
         
         self.log_area.insert(tk.END, log_line)
         self.log_area.see(tk.END)
         try:
             # 存入真正的 SQLite 数据库
-            self.cursor.execute("INSERT INTO logs (time, message) VALUES (?, ?)", (long_time, message))
+            self.cursor.execute("INSERT INTO logs (time, message) VALUES (?, ?)", (full_time, message))
             self.db_conn.commit()
         except: pass
 
