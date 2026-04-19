@@ -13,7 +13,7 @@ class GitCreatorGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("KDSN Git Helper - 主分支直推版 (专为 AI 投喂打造)")
-        self.root.geometry("620x780")
+        self.root.geometry("620x800") 
         
         self.config_file = "git_helper_config.json"
         self.config_data = self.load_config()
@@ -107,41 +107,63 @@ class GitCreatorGUI:
         self.lbl_gui_alert = tk.Label(flow_frame, text="", font=("微软雅黑", 10, "bold"))
         self.lbl_gui_alert.pack(fill="x")
 
+        # --- 日志控制条（含清空按钮） ---
+        log_ctrl_frame = tk.Frame(self.root)
+        log_ctrl_frame.pack(fill="x", padx=15, pady=(5, 0))
+        tk.Label(log_ctrl_frame, text="📄 操作日志", font=('微软雅黑', 9, 'bold'), fg="gray").pack(side="left")
+        tk.Button(log_ctrl_frame, text="🧹 清空日志", command=self.clear_logs, font=('微软雅黑', 8), cursor="hand2", bg="#f5f5f5").pack(side="right")
+
+        # --- 日志区域 ---
         self.log_area = scrolledtext.ScrolledText(self.root, height=12, font=('Consolas', 9))
-        self.log_area.pack(fill="both", padx=15, pady=10, expand=True)
+        self.log_area.pack(fill="both", padx=15, pady=(2, 10), expand=True)
 
     def show_gui_alert(self, message, color):
         self.lbl_gui_alert.config(text=message, fg=color)
         self.root.after(4000, lambda: self.lbl_gui_alert.config(text=""))
 
-    # --- 【重构 1】：历史日志倒序加载（最新在最上） ---
     def load_recent_logs(self):
         try:
             self.log_area.delete('1.0', tk.END)
-            # DESC 获取最新的 15 条，此时 fetchall 是 [最新, 较新, 最旧]
             self.cursor.execute("SELECT time, message FROM logs ORDER BY id DESC LIMIT 15")
             rows = self.cursor.fetchall()
             if rows:
-                # 依次按顺序（最新 -> 最旧）插入到底部，就能形成最新在最上面的视觉效果
                 for row in rows:
                     self.log_area.insert(tk.END, f"[{row[0]}] {row[1]}\n")
                 self.log_area.insert(tk.END, "--- 以上为数据库历史记录 ---\n")
         except Exception as e:
             pass
 
-    # --- 【重构 2】：新日志永远插在第一行 ---
     def log(self, message):
         full_time = time.strftime('%Y-%m-%d %H:%M:%S')
         log_line = f"[{full_time}] {message}\n"
         
-        # 永远插入在第 1 行第 0 列 (即最顶端)，挤下旧日志
         self.log_area.insert('1.0', log_line)
-        self.log_area.see('1.0') # 确保视图留在最顶端
+        self.log_area.see('1.0') 
         
         try:
             self.cursor.execute("INSERT INTO logs (time, message) VALUES (?, ?)", (full_time, message))
             self.db_conn.commit()
         except: pass
+
+    # --- 【修改】：瞬间清空日志功能，拒绝弹窗 ---
+    def clear_logs(self):
+        # 1. 清空 GUI 面板
+        self.log_area.delete('1.0', tk.END)
+        
+        # 2. 清空 SQLite 数据库里的记录（表还在，只是数据没了）
+        try:
+            self.cursor.execute("DELETE FROM logs")
+            self.db_conn.commit()
+        except: pass
+        
+        # 3. 清空外部 txt 日志文件内容
+        try:
+            with open("git_helper_history.log", "w", encoding="utf-8") as f:
+                pass 
+        except: pass
+        
+        # 4. 留下新的起点提示
+        self.log("🧹 历史日志已瞬间清空。")
 
     def auto_load_last_project(self):
         if "last_opened" in self.config_data:
@@ -150,7 +172,6 @@ class GitCreatorGUI:
                 self.repo_path.set(last_path)
                 self.remote_url.set(self.config_data.get(last_path, ""))
                 self.update_status()
-                # 启动时恢复播报
                 self.log(f"🔄 自动恢复上次项目: {os.path.basename(last_path)}")
                 return
         for path in self.config_data.keys():
@@ -318,14 +339,12 @@ class GitCreatorGUI:
         self.config_data["last_opened"] = self.repo_path.get()
         with open(self.config_file, 'w') as f: json.dump(self.config_data, f)
 
-    # --- 【重构 3】：切换目录时正确播报并清空上次状态 ---
     def select_dir(self):
         path = filedialog.askdirectory()
         if path:
             self.repo_path.set(path)
             self.remote_url.set(self.config_data.get(path, ""))
             
-            # 清空上次状态
             self.last_branch = "无"
             self.lbl_last_repo.config(text="📁 仓库: 无")
             self.lbl_last_branch.config(text="🌿 分支: 无")
@@ -333,11 +352,9 @@ class GitCreatorGUI:
             self.btn_last_web.config(state="disabled")
             self.btn_last_copy.config(state="disabled")
             
-            # 刷新当前状态
             self.update_status()
             self.save_config() 
             
-            # 在顶部打出高亮日志
             self.log(f"📁 切换项目目录至: {os.path.basename(path)}")
 
     def open_settings(self):
