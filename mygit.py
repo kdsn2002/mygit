@@ -11,7 +11,7 @@ from datetime import datetime
 class GitCreatorGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("KDSN Git Helper - 严谨防呆版")
+        self.root.title("KDSN Git Helper - 严谨防呆版 (防自我背刺)")
         self.root.geometry("620x760")
         
         # 1. 核心配置与样式
@@ -20,7 +20,7 @@ class GitCreatorGUI:
         self.colors = {
             "flash1": "#FFFF00", "flash2": "#800080",
             "current": "#2E7D32", "blue": "#2196F3", "gray": "gray",
-            "repo_name": "#D32F2F" # 醒目的红色
+            "repo_name": "#D32F2F" 
         }
 
         # 2. 变量
@@ -120,6 +120,32 @@ class GitCreatorGUI:
                 self.update_status()
                 break
 
+    # --- 【新增代码：生成隐身衣】 ---
+    def enforce_gitignore(self, repo, path):
+        """强制将工具自身文件加入忽略名单，防止被当成代码修改"""
+        ignores = ['git_helper_history.log', 'git_helper_config.json']
+        gitignore_path = os.path.join(path, '.gitignore')
+        
+        # 1. 确保名字写入了 .gitignore
+        content = ""
+        if os.path.exists(gitignore_path):
+            with open(gitignore_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+        
+        with open(gitignore_path, 'a', encoding='utf-8') as f:
+            for item in ignores:
+                if item not in content:
+                    if content and not content.endswith('\n'):
+                        f.write("\n")
+                    f.write(f"{item}\n")
+                    content += f"{item}\n"
+        
+        # 2. 从 Git 缓存中强行解除之前的错误追踪
+        try:
+            repo.git.rm('--cached', 'git_helper_history.log', 'git_helper_config.json', ignore_unmatch=True)
+        except:
+            pass
+
     # --- 交互反馈 ---
     def copy_branch_and_flash(self, mode):
         if mode == "last":
@@ -177,6 +203,10 @@ class GitCreatorGUI:
             self.lbl_curr_repo.config(text=f"📁 仓库: [{repo_name}]")
             try:
                 repo = git.Repo(path)
+                
+                # 【防呆机制核心】：检测前先把工具自己的文件藏起来
+                self.enforce_gitignore(repo, path)
+                
                 self.curr_branch = repo.active_branch.name
                 self.lbl_curr_branch.config(text=f"🌿 分支: {self.curr_branch}")
                 
@@ -188,7 +218,6 @@ class GitCreatorGUI:
                 # 按钮点亮逻辑
                 has_url = bool(self.remote_url.get())
                 self.btn_curr_web.config(state="normal" if has_url else "disabled")
-                # 只有现场干净且有 URL 才允许复制链接
                 self.btn_curr_copy.config(state="normal" if is_clean and has_url else "disabled")
                 
             except:
@@ -199,7 +228,7 @@ class GitCreatorGUI:
             self.lbl_curr_branch.config(text="🌿 分支: 无")
             self.lbl_curr_status.config(text="未初始化 Git 仓库")
 
-    # --- 【重点防呆】流水线拦截 ---
+    # --- 流水线拦截 ---
     def run_one_click_pipeline(self):
         path = self.repo_path.get()
         url = self.remote_url.get()
@@ -218,7 +247,6 @@ class GitCreatorGUI:
                 self.log("🛡️ 已拦截无意义的重复打包。")
                 return
 
-            # 如果确实有改动，开始正常流水线作业
             # 1. 状态移交
             self.last_branch = self.curr_branch
             self.lbl_last_repo.config(text=self.lbl_curr_repo.cget("text"))
