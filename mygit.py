@@ -10,8 +10,8 @@ from datetime import datetime
 class GitCreatorGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("KDSN Git Helper - 记忆集成版 (无打扰最终版)")
-        self.root.geometry("600x650")
+        self.root.title("KDSN Git Helper - 记忆集成版 (复刻面板版)")
+        self.root.geometry("600x680")
         
         # 1. 核心配置与样式
         self.config_file = "git_helper_config.json"
@@ -31,30 +31,38 @@ class GitCreatorGUI:
         self.auto_load_last_project() # 启动时尝试自动恢复记忆
 
     def setup_ui(self):
-        # --- 顶部状态栏 (拆分仓库名和分支状态) ---
-        self.status_frame = tk.LabelFrame(self.root, text=" 实时 Git 现场 (点击复制分支) ", padx=10, pady=5, 
-                                          fg=self.colors["blue"], font=('Arial', 9, 'bold'), cursor="hand2")
-        self.status_frame.pack(fill="x", padx=15, pady=5)
+        # --- 顶部状态栏 (完美复刻你的代码二 UI) ---
+        self.status_frame = tk.LabelFrame(self.root, text=" 当前实时状态 (点击复制分支) ", padx=15, pady=10, 
+                                          fg=self.colors["blue"], font=('微软雅黑', 10, 'bold'), cursor="hand2")
+        self.status_frame.pack(fill="x", padx=15, pady=10)
         
-        # 仓库名 (红字)
-        self.lbl_repo_name = tk.Label(self.status_frame, text="等待选择仓库", fg=self.colors["repo_name"], font=("微软雅黑", 11, "bold"))
-        self.lbl_repo_name.pack(side="left", padx=(0, 10))
+        # 仓库名 (红字标注，防迷路)
+        self.lbl_repo_name = tk.Label(self.status_frame, text="📁 仓库: [等待选择]", fg=self.colors["repo_name"], font=("微软雅黑", 10, "bold"))
+        self.lbl_repo_name.pack(anchor="w", pady=(0, 5))
 
-        # 分支与状态 (黑字)
-        self.lbl_status = tk.Label(self.status_frame, text="...", justify="left", font=("Consolas", 10))
-        self.lbl_status.pack(side="left")
-        
-        # 绑定点击复制和闪烁
-        self.status_frame.bind("<Button-1>", lambda e: self.copy_branch_and_flash())
-        self.lbl_repo_name.bind("<Button-1>", lambda e: self.copy_branch_and_flash())
-        self.lbl_status.bind("<Button-1>", lambda e: self.copy_branch_and_flash())
+        # 核心分支名展示
+        self.lbl_branch = tk.Label(self.status_frame, text="🌿 分支: 无", font=("Consolas", 12, "bold"), fg="black")
+        self.lbl_branch.pack(anchor="w")
+
+        # 分割线
+        self.lbl_divider = tk.Label(self.status_frame, text="---------------------------", fg="gray")
+        self.lbl_divider.pack(anchor="w")
+
+        # 现场干净度状态
+        self.lbl_clean_status = tk.Label(self.status_frame, text="请检测状态...", font=("微软雅黑", 10))
+        self.lbl_clean_status.pack(anchor="w")
+
+        # 绑定点击复制和闪烁 (点框内任何地方都生效)
+        click_targets = [self.status_frame, self.lbl_repo_name, self.lbl_branch, self.lbl_divider, self.lbl_clean_status]
+        for target in click_targets:
+            target.bind("<Button-1>", lambda e: self.copy_branch_and_flash())
 
         # 设置按钮
         tk.Button(self.root, text="⚙️ 仓库配置", command=self.open_settings, font=('Arial', 8)).place(x=510, y=25)
 
         # --- 路径选择 ---
         path_frame = tk.Frame(self.root)
-        path_frame.pack(fill="x", padx=20, pady=10)
+        path_frame.pack(fill="x", padx=20, pady=5)
         tk.Entry(path_frame, textvariable=self.repo_path, state='readonly').pack(side="left", fill="x", expand=True, padx=(0, 5))
         tk.Button(path_frame, text="切换项目", command=self.select_dir).pack(side="right")
 
@@ -62,21 +70,19 @@ class GitCreatorGUI:
         flow_frame = tk.LabelFrame(self.root, text="🚀 核心流水线", padx=15, pady=15)
         flow_frame.pack(fill="x", padx=20, pady=10)
 
-        self.btn_new_feat = tk.Button(flow_frame, text="1. 生成时间分支 (标准化命名)", bg="#e3f2fd", 
+        self.btn_new_feat = tk.Button(flow_frame, text="1. 生成时间分支 (纯净命名)", bg="#e3f2fd", 
                                       command=self.prepare_new_feature, height=2)
         self.btn_new_feat.pack(fill="x", pady=5)
         
-        # 按钮文案修改
         tk.Button(flow_frame, text="2. 推送当前改动并清理现场", bg="#c8e6c9", 
                   command=self.push_feature_for_pr, height=2).pack(fill="x", pady=5)
 
         # --- 日志区域 ---
-        self.log_area = scrolledtext.ScrolledText(self.root, height=15, font=('Consolas', 9))
-        self.log_area.pack(fill="both", padx=20, pady=10, expand=True)
+        self.log_area = scrolledtext.ScrolledText(self.root, height=12, font=('Consolas', 9))
+        self.log_area.pack(fill="both", padx=20, pady=5, expand=True)
 
     # --- 启动恢复逻辑 ---
     def auto_load_last_project(self):
-        """启动时自动加载配置文件中的最后一个项目"""
         if "last_opened" in self.config_data:
             last_path = self.config_data["last_opened"]
             if os.path.exists(last_path):
@@ -94,21 +100,21 @@ class GitCreatorGUI:
                 self.log(f"自动加载项目: {os.path.basename(path)}")
                 break
 
-    # --- 交互反馈 ---
+    # --- 交互反馈 (黄紫闪烁) ---
     def flash_effect(self, stage=0):
         sequence = [self.colors["flash1"], self.colors["flash2"], self.colors["flash1"], self.colors["flash2"]]
         if stage < len(sequence):
+            # 闪烁外框和文字
             self.status_frame.config(fg=sequence[stage])
-            self.lbl_repo_name.config(fg=sequence[stage])
-            self.lbl_status.config(fg=sequence[stage])
+            self.lbl_branch.config(fg=sequence[stage])
             self.root.after(120, lambda: self.flash_effect(stage + 1))
         else:
+            # 恢复正常颜色
             self.status_frame.config(fg=self.colors["blue"])
-            self.lbl_repo_name.config(fg=self.colors["repo_name"])
-            self.lbl_status.config(fg="black")
+            self.lbl_branch.config(fg="black")
 
     def copy_branch_and_flash(self):
-        if self.current_branch and self.current_branch != "None":
+        if self.current_branch and self.current_branch != "None" and "获取失败" not in self.current_branch:
             pyperclip.copy(self.current_branch)
             self.flash_effect()
             self.log(f"已复制分支名: {self.current_branch}")
@@ -122,32 +128,38 @@ class GitCreatorGUI:
         path = self.repo_path.get()
         if path and os.path.exists(os.path.join(path, '.git')):
             repo_name = os.path.basename(path)
-            self.lbl_repo_name.config(text=f"[{repo_name}]")
+            self.lbl_repo_name.config(text=f"📁 仓库: [{repo_name}]")
             try:
                 repo = git.Repo(path)
                 self.current_branch = repo.active_branch.name
                 
+                # 更新大字分支名
+                self.lbl_branch.config(text=f"🌿 分支: {self.current_branch}")
+                
                 status_raw = repo.git.status()
                 is_clean = "nothing to commit, working tree clean" in status_raw
-                clean_msg = "✅ 现场干净" if is_clean else "⚠️ 有改动需提交"
+                # 完美复刻提示语
+                clean_msg = "✅ 现场干净，可以去 PR 了" if is_clean else "⚠️ 有改动，请先提交推送"
                 
-                self.lbl_status.config(text=f"🌿 {self.current_branch} | {clean_msg}")
+                self.lbl_clean_status.config(text=clean_msg)
             except:
-                self.lbl_status.config(text="❌ 仓库读取异常")
+                self.lbl_branch.config(text="🌿 分支: 获取失败")
+                self.lbl_clean_status.config(text="❌ 仓库读取异常")
         else:
-            self.lbl_repo_name.config(text="未选择")
-            self.lbl_status.config(text="未初始化 Git 仓库")
+            self.lbl_repo_name.config(text="📁 仓库: 未选择")
+            self.lbl_branch.config(text="🌿 分支: 无")
+            self.lbl_clean_status.config(text="未初始化 Git 仓库")
 
     def prepare_new_feature(self):
         path = self.repo_path.get()
         if not path: return
         try:
             repo = git.Repo(path)
-            new_time = self.get_formatted_time()
-            branch_name = f"dev-{new_time}"
+            # 【修改点】：去掉了 "dev-" 前缀，直接使用时间戳
+            branch_name = self.get_formatted_time()
             
             repo.create_head(branch_name).checkout()
-            self.log(f"🌱 已创建标准化时间分支: {branch_name}")
+            self.log(f"🌱 已创建纯时间分支: {branch_name}")
             self.update_status()
             messagebox.showinfo("分支已就绪", f"当前分支: {branch_name}\n已自动更新现场监控。")
         except Exception as e:
@@ -201,14 +213,13 @@ class GitCreatorGUI:
         self.log_area.insert(tk.END, log_line)
         self.log_area.see(tk.END)
         
-        # 写入本地文件作为永久日志
         try:
             with open("git_helper_history.log", "a", encoding="utf-8") as f:
                 f.write(f"[{long_time}] {message}\n")
         except Exception as e:
             print(f"日志写入失败: {e}")
 
-    # --- 推送逻辑 (无网页纯净版) ---
+    # --- 推送逻辑 (静默无网页版) ---
     def push_feature_for_pr(self):
         path = self.repo_path.get()
         url = self.remote_url.get()
@@ -220,22 +231,17 @@ class GitCreatorGUI:
                 messagebox.showwarning("严谨警告", "禁止直接推送主分支！")
                 return
             
-            # 自动添加和提交
             repo.git.add(A=True)
             repo.index.commit(f"PR Update: {current}")
             
-            # 推送到远程
             origin = repo.remote('origin') if 'origin' in repo.remotes else repo.create_remote('origin', url)
             origin.set_url(url)
             self.log(f"正在推送 {current}...")
             origin.push(current, force=True)
             
             self.log("✅ 代码已安全推送到 GitHub 云端！")
-            
-            # 刷新 GUI 状态变绿
             self.update_status()
             
-            # 直接弹窗提示成功，不打开任何网页
             messagebox.showinfo("推送成功", f"分支 [{current}] 已安全上云！\n现场已清理干净。\n\n你可以直接在 Cursor 里进行 PR 操作了。")
                 
         except Exception as e: 
