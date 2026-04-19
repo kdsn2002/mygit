@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import filedialog, messagebox, scrolledtext, Toplevel
+from tkinter import filedialog, messagebox, scrolledtext, Toplevel, simpledialog
 from tkinter import ttk
 import git
 import os
@@ -15,10 +15,9 @@ from datetime import datetime
 class GitCreatorGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("KDSN Git Helper - 终极专业版 (动态排版 + 分支列表)")
-        # 加宽初始窗口以适配左右分栏
-        self.root.geometry("980x800") 
-        self.root.minsize(800, 600) # 设置最小窗口限制防止缩太小变形
+        self.root.title("KDSN Git Helper - 终极纯净版 (自适应拉伸 + 弹窗交互)")
+        self.root.geometry("620x800") 
+        self.root.minsize(550, 600) # 防止缩得太小导致控件重叠
         
         self.config_file = "git_helper_config.json"
         self.config_data = self.load_config()
@@ -33,8 +32,6 @@ class GitCreatorGUI:
         self.remote_url = tk.StringVar()
         self.last_branch = "无"
         self.curr_branch = "无"
-        self.commit_msg_var = tk.StringVar()
-        self.selected_tree_branch = None
 
         self.init_database()
         self.setup_ui()
@@ -54,45 +51,35 @@ class GitCreatorGUI:
         self.db_conn.commit()
 
     def setup_ui(self):
-        # 让根窗口支持行列拉伸缩放
-        self.root.columnconfigure(0, weight=1)
-        self.root.rowconfigure(3, weight=1) # 索引3是左右分栏区，允许纵向拉伸
-        self.root.rowconfigure(5, weight=1) # 索引5是日志区，允许纵向拉伸
-
-        # --- 1. 顶部大红字与配置 (Row 0) ---
+        # --- 1. 顶部大红字与导航 (填满 X 轴) ---
         header_frame = tk.Frame(self.root)
-        header_frame.grid(row=0, column=0, sticky="ew", padx=15, pady=(15, 5))
+        header_frame.pack(fill="x", padx=15, pady=(15, 5))
+
         tk.Button(header_frame, text="⚙️ 仓库配置", command=self.open_settings, font=('Arial', 10, 'bold'), bg="#f0f0f0").pack(side="left")
+        # 将历史分支按钮收纳至顶部
+        tk.Button(header_frame, text="🗂️ 历史分支", command=self.open_history_window, font=('Arial', 10, 'bold'), bg="#e8f5e9").pack(side="left", padx=(10, 0))
+        
         self.lbl_main_repo = tk.Label(header_frame, text="[未选择仓库]", fg="red", font=("微软雅黑", 16, "bold"))
         self.lbl_main_repo.pack(side="left", expand=True)
 
-        # --- 2. 项目路径切换区 (Row 1) ---
+        # --- 2. 路径切换与下拉框 ---
         path_frame = tk.Frame(self.root)
-        path_frame.grid(row=1, column=0, sticky="ew", padx=15, pady=(0, 10))
+        path_frame.pack(fill="x", padx=15, pady=(0, 10))
+        
         self.combo_path = ttk.Combobox(path_frame, textvariable=self.repo_path, state='readonly', font=('Arial', 10))
         self.combo_path.pack(side="left", fill="x", expand=True, padx=(0, 10))
         self.combo_path.bind("<<ComboboxSelected>>", self.on_combo_select)
+        
         tk.Button(path_frame, text="📁 浏览新目录", command=self.select_dir, font=('Arial', 9)).pack(side="right")
 
-        # --- 3. 核心左右分栏区 (Row 3, 可拉伸) ---
-        split_frame = tk.Frame(self.root)
-        split_frame.grid(row=3, column=0, sticky="nsew", padx=15, pady=5)
-        split_frame.columnconfigure(0, weight=4) # 左侧状态区占 4 份宽
-        split_frame.columnconfigure(1, weight=5) # 右侧列表区占 5 份宽，列表更宽点好看
-        split_frame.rowconfigure(0, weight=1)
-
-        # ====== 左侧：双状态面板 ======
-        left_frame = tk.Frame(split_frame)
-        left_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
-
+        # ====== 3. 双状态面板 (上下流线布局，自适应宽度) ======
         # [上次状态]
-        self.frame_last = tk.LabelFrame(left_frame, text=" 上次状态 ", fg=self.colors["gray"], font=('微软雅黑', 10))
-        self.frame_last.pack(fill="x", pady=(0, 10))
+        self.frame_last = tk.LabelFrame(self.root, text=" 上次状态 ", fg=self.colors["gray"], font=('微软雅黑', 10))
+        self.frame_last.pack(fill="x", padx=15, pady=5)
         
         last_info_frame = tk.Frame(self.frame_last, cursor="hand2")
         last_info_frame.pack(side="left", fill="both", expand=True, padx=10, pady=5)
         
-        # 去掉仓库行，第一行改为记录
         self.lbl_last_msg = tk.Label(last_info_frame, text="📝 记录: 无", fg="gray", font=("微软雅黑", 10, "bold"))
         self.lbl_last_msg.pack(anchor="w")
         self.lbl_last_branch = tk.Label(last_info_frame, text="🌿 分支: 无", font=("Consolas", 10), fg="gray")
@@ -108,19 +95,13 @@ class GitCreatorGUI:
         self.btn_last_copy.pack(fill="x", pady=2)
 
         # [当前实时状态]
-        self.frame_curr = tk.LabelFrame(left_frame, text=" 当前实时状态 ", fg=self.colors["blue"], font=('微软雅黑', 10, 'bold'))
-        self.frame_curr.pack(fill="x", expand=False)
+        self.frame_curr = tk.LabelFrame(self.root, text=" 当前实时状态 ", fg=self.colors["blue"], font=('微软雅黑', 10, 'bold'))
+        self.frame_curr.pack(fill="x", padx=15, pady=5)
         
         curr_info_frame = tk.Frame(self.frame_curr, cursor="hand2")
         curr_info_frame.pack(side="left", fill="both", expand=True, padx=10, pady=5)
         
-        # 去掉仓库行，第一行改为手动输入框
-        msg_frame = tk.Frame(curr_info_frame)
-        msg_frame.pack(fill="x", pady=(0, 5))
-        tk.Label(msg_frame, text="📝 更新:", fg=self.colors["blue"], font=("微软雅黑", 10, "bold")).pack(side="left")
-        self.entry_msg = tk.Entry(msg_frame, textvariable=self.commit_msg_var, font=('微软雅黑', 10))
-        self.entry_msg.pack(side="left", fill="x", expand=True, padx=5)
-        
+        # 移除原有的文本框，直接用 Label 表征当前是在什么分支工作
         self.lbl_curr_branch = tk.Label(curr_info_frame, text="🌿 分支: 无", font=("Consolas", 12, "bold"), fg="black")
         self.lbl_curr_branch.pack(anchor="w")
         self.lbl_curr_status = tk.Label(curr_info_frame, text="请检测状态...", font=("微软雅黑", 10))
@@ -138,65 +119,28 @@ class GitCreatorGUI:
         for target in [curr_info_frame, self.lbl_curr_branch, self.lbl_curr_status]:
             target.bind("<Button-1>", lambda e: self.copy_branch_and_flash("curr"))
 
-        # ====== 右侧：分支列表面板 ======
-        right_frame = tk.Frame(split_frame)
-        right_frame.grid(row=0, column=1, sticky="nsew")
+        # --- 4. 核心流水线区 ---
+        flow_frame = tk.LabelFrame(self.root, text="🚀 核心流水线", padx=15, pady=10)
+        flow_frame.pack(fill="x", padx=15, pady=5)
         
-        self.frame_branches = tk.LabelFrame(right_frame, text=" 🗂️ 历史分支列表 ", fg="#424242", font=('微软雅黑', 10, 'bold'))
-        self.frame_branches.pack(fill="both", expand=True)
-
-        # 构建 Treeview 树状表格
-        columns = ("select", "branch", "message")
-        self.tree = ttk.Treeview(self.frame_branches, columns=columns, show="headings", selectmode="browse")
-        
-        self.tree.heading("select", text="单选")
-        self.tree.column("select", width=40, anchor="center", stretch=False) # 第一列固定宽度，不随拉伸改变
-        
-        self.tree.heading("branch", text="分支名")
-        self.tree.column("branch", width=160, anchor="w", stretch=False)
-        
-        self.tree.heading("message", text="更新内容")
-        self.tree.column("message", width=200, anchor="w", stretch=True) # 只有内容列随窗口拉伸
-        
-        # 绑定点击单选事件
-        self.tree.bind("<ButtonRelease-1>", self.on_tree_click)
-        
-        scrollbar = ttk.Scrollbar(self.frame_branches, orient=tk.VERTICAL, command=self.tree.yview)
-        self.tree.configure(yscroll=scrollbar.set)
-        scrollbar.pack(side="right", fill="y")
-        self.tree.pack(side="top", fill="both", expand=True, padx=2, pady=2)
-        
-        # 右侧底部的载入按钮
-        self.btn_load_tree = tk.Button(self.frame_branches, text="⬇️ 载入勾选的历史分支", command=self.load_selected_branch, font=('微软雅黑', 10, 'bold'), bg="#e8f5e9", height=1)
-        self.btn_load_tree.pack(fill="x", padx=5, pady=5)
-
-        # --- 4. 核心流水线区 (Row 4) ---
-        flow_frame = tk.Frame(self.root)
-        flow_frame.grid(row=4, column=0, sticky="ew", padx=15, pady=(10, 5))
-        
-        self.btn_pipeline = tk.Button(flow_frame, text="📦 一键打包上云\n(建时间分支 ➔ 提交 ➔ 推送)", 
+        self.btn_pipeline = tk.Button(flow_frame, text="📦 一键打包上云\n(点击后输入更新内容 ➔ 建分支 ➔ 提交 ➔ 推送)", 
                                       bg="#e3f2fd", font=('微软雅黑', 11, 'bold'), command=self.run_one_click_pipeline, height=2)
         self.btn_pipeline.pack(fill="x")
         
         self.lbl_gui_alert = tk.Label(flow_frame, text="", font=("微软雅黑", 10, "bold"))
         self.lbl_gui_alert.pack(fill="x")
 
-        # --- 5. 日志控制条与内容区 (Row 5, 可拉伸) ---
+        # --- 5. 日志控制条与内容区 (拉伸的核心支撑) ---
         log_ctrl_frame = tk.Frame(self.root)
-        log_ctrl_frame.grid(row=5, column=0, sticky="nsew", padx=15, pady=(0, 10))
-        log_ctrl_frame.columnconfigure(0, weight=1)
-        log_ctrl_frame.rowconfigure(1, weight=1) # 日志文本框行可拉伸
+        log_ctrl_frame.pack(fill="x", padx=15, pady=(5, 0))
+        
+        tk.Label(log_ctrl_frame, text="📄 操作日志", font=('微软雅黑', 9, 'bold'), fg="gray").pack(side="left")
+        tk.Button(log_ctrl_frame, text="🧹 清空", command=self.clear_logs, font=('微软雅黑', 8), cursor="hand2", bg="#f5f5f5").pack(side="right", padx=(5, 0))
+        tk.Button(log_ctrl_frame, text="📋 复制全部", command=self.copy_all_logs, font=('微软雅黑', 8), cursor="hand2", bg="#e8f5e9").pack(side="right")
 
-        # 顶部条
-        log_header = tk.Frame(log_ctrl_frame)
-        log_header.grid(row=0, column=0, sticky="ew")
-        tk.Label(log_header, text="📄 操作日志", font=('微软雅黑', 9, 'bold'), fg="gray").pack(side="left")
-        tk.Button(log_header, text="🧹 清空", command=self.clear_logs, font=('微软雅黑', 8), cursor="hand2", bg="#f5f5f5").pack(side="right", padx=(5, 0))
-        tk.Button(log_header, text="📋 复制全部", command=self.copy_all_logs, font=('微软雅黑', 8), cursor="hand2", bg="#e8f5e9").pack(side="right")
-
-        # 日志文本区域
-        self.log_area = scrolledtext.ScrolledText(log_ctrl_frame, font=('Consolas', 9))
-        self.log_area.grid(row=1, column=0, sticky="nsew", pady=(2, 0))
+        # expand=True 让日志区域在窗口被纵向拉伸时能自动吸纳所有多余空间
+        self.log_area = scrolledtext.ScrolledText(self.root, height=12, font=('Consolas', 9))
+        self.log_area.pack(fill="both", expand=True, padx=15, pady=(2, 10))
 
     def show_gui_alert(self, message, color):
         self.lbl_gui_alert.config(text=message, fg=color)
@@ -358,7 +302,7 @@ class GitCreatorGUI:
                 repo = git.Repo(path)
                 status_raw = repo.git.status('--porcelain')
                 is_clean = len(status_raw) == 0
-                clean_msg = "✅ 现场干净，无需重复打包" if is_clean else "⚠️ 有新改动，请手动输入更新并打包"
+                clean_msg = "✅ 现场干净，无需重复打包" if is_clean else "⚠️ 有新改动，请点击打包并输入更新记录"
                 
                 if self.lbl_curr_status.cget("text") != clean_msg:
                     self.lbl_curr_status.config(text=clean_msg)
@@ -368,70 +312,101 @@ class GitCreatorGUI:
         
         self.root.after(2000, self.auto_check_status)
 
-    # --- 【重构右侧列表】：读取分支到 Treeview 列表 ---
-    def refresh_branch_list(self, repo):
-        try:
-            # 清空当前表格
-            for item in self.tree.get_children():
-                self.tree.delete(item)
+    # --- 【重点功能重构】：弹出独立的“历史分支”窗口 ---
+    def open_history_window(self):
+        path = self.repo_path.get()
+        if not path or not os.path.exists(os.path.join(path, '.git')):
+            messagebox.showwarning("提示", "当前目录不是有效的 Git 仓库，无法查看历史分支。")
+            return
+
+        win = Toplevel(self.root)
+        win.title("🗂️ 历史分支与载入")
+        win.geometry("650x450")
+        win.minsize(500, 300)
+        
+        frame_branches = tk.Frame(win)
+        frame_branches.pack(fill="both", expand=True, padx=10, pady=10)
+
+        columns = ("select", "branch", "message")
+        tree = ttk.Treeview(frame_branches, columns=columns, show="headings", selectmode="browse")
+        
+        tree.heading("select", text="单选")
+        tree.column("select", width=50, anchor="center", stretch=False)
+        
+        tree.heading("branch", text="时间分支名")
+        tree.column("branch", width=160, anchor="w", stretch=False)
+        
+        tree.heading("message", text="纯净更新内容")
+        tree.column("message", width=360, anchor="w", stretch=True)
+        
+        def on_tree_click(event):
+            item = tree.identify_row(event.y)
+            if item:
+                # 重置所有为未选
+                for child in tree.get_children():
+                    vals = list(tree.item(child, "values"))
+                    if vals[0] == "🔘":
+                        vals[0] = "⚪"
+                        tree.item(child, values=vals)
+                # 勾选当前
+                vals = list(tree.item(item, "values"))
+                vals[0] = "🔘"
+                tree.item(item, values=vals)
                 
-            self.selected_tree_branch = None
-            
-            # 按创建/提交时间倒序排列分支 (最新的在上面)
+        tree.bind("<ButtonRelease-1>", on_tree_click)
+        
+        scrollbar = ttk.Scrollbar(frame_branches, orient=tk.VERTICAL, command=tree.yview)
+        tree.configure(yscroll=scrollbar.set)
+        scrollbar.pack(side="right", fill="y")
+        tree.pack(side="top", fill="both", expand=True)
+
+        try:
+            repo = git.Repo(path)
             branches = sorted(repo.branches, key=lambda b: b.commit.committed_datetime, reverse=True)
-            
             for b in branches:
                 msg = b.commit.message.strip().split('\n')[0]
-                # 提取纯文本信息，屏蔽 AI 防爆标记
                 if msg.startswith("Auto Wrap: "):
                     msg = msg.replace("Auto Wrap: ", "")
+                # 【强迫症清理】：剔除可能带上的 ": 分支名" 尾巴，保证列表只看纯净文字
+                if f": {b.name}" in msg:
+                    msg = msg.replace(f": {b.name}", "")
                 
-                # 当前活跃分支给个特殊标记，但不强制选中单选框
+                # 当前工作区的分支前加个小标记
                 if b.name == repo.active_branch.name:
-                    msg = f"[当前] {msg}"
+                    msg = f"[当前停留] {msg}"
                     
-                self.tree.insert("", "end", values=("⚪", b.name, msg))
-        except: pass
+                tree.insert("", "end", values=("⚪", b.name, msg))
+        except Exception as e:
+            pass
 
-    # --- 【重构右侧列表】：处理单击单选框事件 ---
-    def on_tree_click(self, event):
-        item = self.tree.identify_row(event.y)
-        if item:
-            # 先把所有行的第一列重置为未选中
-            for child in self.tree.get_children():
-                vals = list(self.tree.item(child, "values"))
-                if vals[0] == "🔘":
-                    vals[0] = "⚪"
-                    self.tree.item(child, values=vals)
-            
-            # 把当前点击的行设为选中
-            vals = list(self.tree.item(item, "values"))
-            vals[0] = "🔘"
-            self.tree.item(item, values=vals)
-            
-            # 记录选中的分支名
-            self.selected_tree_branch = vals[1]
+        btn_load = tk.Button(win, text="⬇️ 载入勾选的历史分支 (回到过去)", font=('微软雅黑', 10, 'bold'), bg="#e8f5e9", height=2,
+                             command=lambda: self.load_selected_branch_from_tree(tree, win))
+        btn_load.pack(fill="x", padx=10, pady=(0, 10))
 
-    # --- 【重构右侧列表】：载入勾选分支 ---
-    def load_selected_branch(self):
-        target_branch = self.selected_tree_branch
-        path = self.repo_path.get()
+    def load_selected_branch_from_tree(self, tree, win):
+        target_branch = None
+        for child in tree.get_children():
+            if tree.item(child, "values")[0] == "🔘":
+                target_branch = tree.item(child, "values")[1]
+                break
+                
         if not target_branch:
-            self.show_gui_alert("❌ 请先在上方列表中点击勾选一个分支", "red")
+            messagebox.showwarning("提示", "请先在列表中点击勾选一个分支", parent=win)
             return
-        if not path: return
-        
+            
+        path = self.repo_path.get()
         try:
             repo = git.Repo(path)
             if repo.is_dirty(untracked_files=True):
-                if not messagebox.askyesno("⚠️ 改动冲突警告", "当前有未提交的代码改动！\n\n强行载入历史分支会导致当前未打包的代码被覆盖丢失。\n是否坚持载入？"):
+                if not messagebox.askyesno("⚠️ 改动冲突警告", "当前有未提交的代码改动！\n\n强行载入历史分支会导致当前未打包的代码被覆盖丢失。\n是否坚持载入？", parent=win):
                     return
                 repo.git.reset('--hard') 
             
             repo.git.checkout(target_branch)
             self.log(f"🔄 成功穿越载入历史分支: {target_branch}")
-            self.update_status() # 此时当前实时状态会变成载入的分支
+            self.update_status()
             self.show_gui_alert(f"✅ 已成功载入分支: {target_branch}", self.colors["current"])
+            win.destroy()
         except Exception as e:
             self.log(f"❌ 载入分支失败: {e}")
             self.show_gui_alert("❌ 载入失败，请检查日志", "red")
@@ -444,7 +419,6 @@ class GitCreatorGUI:
             try:
                 repo = git.Repo(path)
                 self.enforce_gitignore(repo, path)
-                self.refresh_branch_list(repo) # 刷新右侧列表
                 
                 self.curr_branch = repo.active_branch.name
                 self.lbl_curr_branch.config(text=f"🌿 分支: {self.curr_branch}")
@@ -458,11 +432,6 @@ class GitCreatorGUI:
             self.lbl_main_repo.config(text=f"[{repo_name}]")
             self.lbl_curr_branch.config(text="🌿 分支: 无")
             self.lbl_curr_status.config(text="未初始化 Git 仓库 (请点击左上角配置 URL)")
-            # 清空右侧列表
-            for item in self.tree.get_children():
-                self.tree.delete(item)
-            self.selected_tree_branch = None
-            
             self.btn_curr_web.config(state="disabled")
             self.btn_curr_copy.config(state="disabled")
 
@@ -490,14 +459,22 @@ class GitCreatorGUI:
                 else:
                     self.log("⚠️ 触发强制同步模式...")
 
+            # --- 【重点重构】：通过优雅的弹窗接收更新内容 ---
+            custom_msg = simpledialog.askstring("输入更新内容", "准备打包上云！\n请输入本次更新的核心记录描述：\n（留空将默认使用 '自动打包上云'）", parent=self.root)
+            
+            if custom_msg is None:
+                # 用户点击了弹窗的“取消”或关闭了弹窗
+                self.show_gui_alert("🛡️ 已取消打包推送 (未确认更新内容)。", self.colors["alert"])
+                return
+                
+            custom_msg = custom_msg.strip()
+            if not custom_msg:
+                custom_msg = "自动打包上云"
+
             self.show_gui_alert("⏳ 正在创建时间分支并推送至云端...", "blue")
             self.root.update()
 
             self.last_branch = self.curr_branch
-            
-            custom_msg = self.commit_msg_var.get().strip()
-            if not custom_msg: custom_msg = "自动打包上云"
-            
             self.lbl_last_msg.config(text=f"📝 记录: {custom_msg}")
             self.lbl_last_branch.config(text=self.lbl_curr_branch.cget("text"))
             self.lbl_last_status.config(text="✅ 历史状态归档")
@@ -511,6 +488,7 @@ class GitCreatorGUI:
                 repo.git.checkout('-B', branch_name)
 
             repo.git.add(A=True)
+            # 提交格式：更新内容 : 分支名
             repo.index.commit(f"{custom_msg}: {branch_name}")
 
             self.log(f"📡 正在尝试连线推送到: {url}")
@@ -519,8 +497,7 @@ class GitCreatorGUI:
             origin.set_url(url)
             origin.push(branch_name, force=True, set_upstream=True)
 
-            self.commit_msg_var.set("")
-            self.update_status() # 自动刷新状态并重新加载右侧列表
+            self.update_status()
             self.copy_branch_url("curr")
             
             self.show_gui_alert("✅ 时间分支打包上云成功！", self.colors["current"])
@@ -550,7 +527,6 @@ class GitCreatorGUI:
             self.lbl_last_status.config(text="...")
             self.btn_last_web.config(state="disabled")
             self.btn_last_copy.config(state="disabled")
-            self.commit_msg_var.set("")
             
             self.update_status()
             self.save_config() 
@@ -567,7 +543,6 @@ class GitCreatorGUI:
             self.lbl_last_status.config(text="...")
             self.btn_last_web.config(state="disabled")
             self.btn_last_copy.config(state="disabled")
-            self.commit_msg_var.set("")
             
             self.update_status()
             self.save_config() 
