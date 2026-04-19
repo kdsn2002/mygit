@@ -8,12 +8,14 @@ import json
 import pyperclip
 import webbrowser
 import sqlite3
+import shutil
+import stat
 from datetime import datetime
 
 class GitCreatorGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("KDSN Git Helper - 终极流水线版 (恢复时间分支 + 下拉记忆)")
+        self.root.title("KDSN Git Helper - 终极流水线版 (带物理超度)")
         self.root.geometry("620x800") 
         
         self.config_file = "git_helper_config.json"
@@ -251,7 +253,6 @@ class GitCreatorGUI:
             webbrowser.open(f"{url}/tree/{branch}")
             self.log("🌐 已在浏览器中打开分支")
 
-    # --- 【重加回来的关键函数！】 ---
     def get_formatted_time(self):
         now = datetime.now()
         return f"{now.year}-{now.month}-{now.day}--{now.strftime('%H-%M-%S')}"
@@ -318,7 +319,6 @@ class GitCreatorGUI:
             self.btn_last_web.config(state="normal")
             self.btn_last_copy.config(state="normal")
 
-            # 恢复时间分支创建逻辑
             branch_name = self.get_formatted_time()
             try:
                 repo.git.checkout('-b', branch_name)
@@ -385,16 +385,57 @@ class GitCreatorGUI:
             self.save_config() 
             self.log(f"📁 浏览切换项目至: {os.path.basename(path)}")
 
+    # --- 【底层硬核：解除只读限制的删除回调】 ---
+    def remove_readonly(self, func, path, _):
+        """清除文件的只读属性并重试删除（专治 Windows 下 .git 删不掉的顽疾）"""
+        os.chmod(path, stat.S_IWRITE)
+        func(path)
+
+    # --- 【新增核弹：物理超度影子库】 ---
+    def delete_git_folder(self, win):
+        path = self.repo_path.get()
+        git_dir = os.path.join(path, '.git')
+        
+        if not os.path.exists(git_dir):
+            messagebox.showinfo("提示", "当前目录干净清爽，不存在 .git 记忆，无需删除。")
+            return
+            
+        if messagebox.askyesno("🔥 终极警告", "确定要彻底删除本地的 .git 记忆吗？\n\n这会清空所有本地 Git 提交历史，但【绝对不会】删除你的任何代码文件！\n\n物理超度后，下次打包将作为全新的项目推送到云端！"):
+            try:
+                # 使用 shutil.rmtree 并附带 onerror 回调，强制粉碎只读文件
+                shutil.rmtree(git_dir, onerror=self.remove_readonly)
+                self.log(f"🔥 已成功摧毁本地影子库记忆: {os.path.basename(path)}")
+                self.update_status() 
+                win.destroy() 
+                messagebox.showinfo("超度成功", "本地影子库已被彻底物理粉碎！\n\n现在面板应该显示为未初始化状态。请重新配置URL并打包，系统将自动从零开始构建！")
+            except Exception as e:
+                messagebox.showerror("删除失败", f"删除 .git 文件夹时出错，请确保没有其他软件（如 VSCode）正在占用该文件夹:\n{e}")
+
+    # --- 【重构的配置窗口】 ---
     def open_settings(self):
         path = self.repo_path.get()
         if not path: return
         win = Toplevel(self.root)
-        win.title("仓库配置")
-        win.geometry("400x200")
+        win.title("仓库配置与高级管理")
+        win.geometry("500x260")
+        
+        # 1. 大红字显示当前仓库名
+        repo_name = os.path.basename(path)
+        tk.Label(win, text=f"当前操作仓库: [{repo_name}]", font=("微软雅黑", 14, "bold"), fg="red").pack(pady=(15, 10))
+        
         tk.Label(win, text="远程 GitHub URL:").pack(pady=5)
-        ent = tk.Entry(win, textvariable=self.remote_url, width=45)
+        ent = tk.Entry(win, textvariable=self.remote_url, width=50)
         ent.pack(pady=5)
-        tk.Button(win, text="保存 URL 配置", command=lambda: self.save_and_init(win)).pack(pady=10)
+        
+        # 按钮横排容器
+        btn_frame = tk.Frame(win)
+        btn_frame.pack(pady=20, fill="x", padx=20)
+        
+        # 保存按钮（左）
+        tk.Button(btn_frame, text="💾 保存 URL 配置", command=lambda: self.save_and_init(win), bg="#e3f2fd", font=("微软雅黑", 9, "bold"), height=2).pack(side="left", expand=True, fill="x", padx=(0, 5))
+        
+        # 2. 物理超度按钮（右）
+        tk.Button(btn_frame, text="🔥 删除 .git 记忆", command=lambda: self.delete_git_folder(win), bg="#ffebee", fg="red", font=("微软雅黑", 9, "bold"), height=2).pack(side="right", expand=True, fill="x", padx=(5, 0))
 
     def save_and_init(self, win):
         path = self.repo_path.get()
@@ -402,6 +443,7 @@ class GitCreatorGUI:
         self.save_config()
         if not os.path.exists(os.path.join(path, '.git')):
             git.Repo.init(path)
+            self.log(f"🌱 自动为 {os.path.basename(path)} 初始化了全新的 Git 仓库")
         win.destroy()
         self.update_status()
 
